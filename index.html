@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MeetingMemo">
+<meta name="theme-color" content="#0f1117">
+<title>MeetingMemo</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0f1117; color: #e8e8e8;
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column;
+  max-width: 480px; margin: 0 auto;
+}
+
+/* ── HEADER ── */
+.header {
+  padding: 16px 20px 12px; border-bottom: 0.5px solid #2a2a3a;
+  position: sticky; top: 0; background: #0f1117; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header-left .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: #fff; }
+.header-left .logo span { color: #6c63ff; }
+.header-left .subtitle { font-size: 12px; color: #666; margin-top: 2px; }
+.settings-btn {
+  width: 36px; height: 36px; border-radius: 10px; border: 0.5px solid #2a2a3a;
+  background: #1a1a2e; color: #888; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent; flex-shrink: 0;
+}
+.settings-btn:active { opacity: 0.7; }
+
+/* ── STEP BAR ── */
+.steps-bar { display: flex; align-items: center; padding: 12px 20px; gap: 0; border-bottom: 0.5px solid #2a2a3a; }
+.step-pip { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+.step-pip-dot { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #2a2a3a; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #555; background: #0f1117; transition: all 0.2s; }
+.step-pip.active .step-pip-dot { border-color: #6c63ff; color: #6c63ff; }
+.step-pip.done .step-pip-dot { background: #6c63ff; border-color: #6c63ff; color: #fff; }
+.step-pip-label { font-size: 10px; color: #555; text-align: center; }
+.step-pip.active .step-pip-label, .step-pip.done .step-pip-label { color: #6c63ff; }
+.step-line { flex: 1; height: 1px; background: #2a2a3a; margin: 0 4px; margin-bottom: 14px; }
+.step-line.done { background: #6c63ff; }
+
+/* ── SCREENS ── */
+.screen { display: none; flex-direction: column; flex: 1; }
+.screen.active { display: flex; }
+.result-screen { display: none; flex-direction: column; flex: 1; }
+.result-screen.active { display: flex; }
+
+/* ── SHARED FORM STYLES ── */
+.field-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+.text-input { width: 100%; background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 12px; padding: 13px 16px; color: #e8e8e8; font-size: 15px; outline: none; -webkit-appearance: none; }
+.text-input:focus { border-color: #6c63ff; }
+.text-input::placeholder { color: #444; }
+.mono { font-family: monospace; font-size: 13px; }
+.attendee-row { display: flex; gap: 8px; }
+.attendee-add-input { flex: 1; background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 10px; padding: 10px 14px; color: #e8e8e8; font-size: 14px; outline: none; -webkit-appearance: none; }
+.attendee-add-input:focus { border-color: #6c63ff; }
+.attendee-add-input::placeholder { color: #444; }
+.add-btn { background: #6c63ff; border: none; border-radius: 10px; color: #fff; padding: 0 16px; font-size: 20px; cursor: pointer; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 4px; margin-top: 8px; }
+.chip { display: flex; align-items: center; gap: 6px; background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 20px; padding: 6px 10px 6px 12px; font-size: 13px; color: #ccc; }
+.chip-color { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.chip-remove { background: none; border: none; color: #555; cursor: pointer; font-size: 16px; padding: 0; line-height: 1; -webkit-tap-highlight-color: transparent; }
+.primary-btn { width: 100%; padding: 16px; background: #6c63ff; border: none; border-radius: 12px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.primary-btn:active { opacity: 0.85; }
+.primary-btn:disabled { opacity: 0.5; }
+.secondary-btn { width: 100%; padding: 10px; background: transparent; border: 0.5px solid #2a2a3a; border-radius: 12px; color: #666; font-size: 13px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.error-box { background: #2a1a1a; border: 0.5px solid #e24b4a44; border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #e24b4a; width: 100%; display: none; line-height: 1.5; }
+.error-box.visible { display: block; }
+
+/* ── SETTINGS SCREEN ── */
+.settings-area { flex: 1; overflow-y: auto; padding-bottom: 32px; }
+.settings-back { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-bottom: 0.5px solid #2a2a3a; cursor: pointer; color: #6c63ff; font-size: 14px; -webkit-tap-highlight-color: transparent; }
+.settings-section { padding: 20px 20px 0; display: flex; flex-direction: column; gap: 10px; }
+.settings-section-title { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
+.settings-card { background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 14px; overflow: hidden; }
+.settings-row { padding: 14px 16px; border-bottom: 0.5px solid #2a2a3a; display: flex; flex-direction: column; gap: 6px; }
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-size: 12px; color: #888; }
+.key-input-row { display: flex; align-items: center; gap: 8px; }
+.key-input-row input { flex: 1; background: transparent; border: none; color: #e8e8e8; font-size: 13px; font-family: monospace; outline: none; padding: 0; }
+.key-input-row input::placeholder { color: #444; }
+.key-saved-dot { width: 8px; height: 8px; border-radius: 50%; background: #1d9e75; flex-shrink: 0; display: none; }
+.key-saved-dot.visible { display: block; }
+.settings-hint { font-size: 11px; color: #555; line-height: 1.6; padding: 0 16px 14px; }
+.settings-hint a { color: #6c63ff; text-decoration: none; }
+.settings-attendees-area { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* ── SETUP SCREEN ── */
+.setup-area { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 18px; overflow-y: auto; padding-bottom: 32px; }
+
+.lang-toggle { display: flex; background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 10px; overflow: hidden; }
+.lang-opt { flex: 1; padding: 10px; border: none; background: transparent; color: #666; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent; text-align: center; }
+.lang-opt.active { background: #6c63ff; color: #fff; }
+
+.add-defaults-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: #1a1a2e; border: 0.5px dashed #3a3a5a; border-radius: 10px;
+  padding: 10px 14px; color: #6c63ff; font-size: 13px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; width: 100%;
+}
+.add-defaults-btn:active { opacity: 0.7; }
+.add-defaults-btn span { font-size: 16px; }
+
+/* ── RECORD ── */
+.record-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px; gap: 24px; }
+.rec-meeting-info { text-align: center; }
+.rec-meeting-title { font-size: 15px; font-weight: 600; color: #fff; }
+.rec-attendees-hint { font-size: 12px; color: #555; margin-top: 4px; }
+.rec-btn-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.rec-btn { width: 100px; height: 100px; border-radius: 50%; border: none; background: #6c63ff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.15s, background 0.2s; -webkit-tap-highlight-color: transparent; }
+.rec-btn:active { transform: scale(0.95); }
+.rec-btn.recording { background: #e24b4a; animation: pulse 1.5s infinite; }
+.rec-btn svg { width: 36px; height: 36px; fill: white; }
+.rec-btn .stop-icon { width: 28px; height: 28px; background: white; border-radius: 4px; display: none; }
+.rec-btn.recording svg { display: none; }
+.rec-btn.recording .stop-icon { display: block; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(226,75,74,0.4)} 50%{box-shadow:0 0 0 20px rgba(226,75,74,0)} }
+.rec-label { font-size: 13px; color: #666; }
+.rec-label.recording { color: #e24b4a; }
+.timer { font-size: 32px; font-weight: 300; letter-spacing: 4px; color: #aaa; font-variant-numeric: tabular-nums; display: none; }
+.timer.visible { display: block; }
+.wave { width: 100%; height: 48px; display: none; }
+.wave.visible { display: block; }
+.rec-status { font-size: 12px; color: #555; text-align: center; padding: 8px 16px; background: #1a1a2e; border-radius: 10px; width: 100%; display: none; }
+.rec-status.visible { display: block; }
+.transcribing-overlay { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px 20px; }
+.transcribing-spinner { width: 48px; height: 48px; border: 3px solid #1a1a2e; border-top: 3px solid #6c63ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.transcribing-label { font-size: 14px; color: #888; text-align: center; }
+
+/* ── REVIEW ── */
+.review-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.review-header { padding: 12px 20px 10px; border-bottom: 0.5px solid #2a2a3a; }
+.review-hint { font-size: 12px; color: #888; line-height: 1.5; }
+.speaker-bar { padding: 10px 20px; border-bottom: 0.5px solid #2a2a3a; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.speaker-bar-label { font-size: 11px; color: #555; width: 100%; margin-bottom: 2px; }
+.spk-btn { padding: 5px 12px; border-radius: 16px; border: 1.5px solid transparent; font-size: 12px; font-weight: 600; cursor: pointer; color: #fff; transition: opacity 0.15s, transform 0.1s; -webkit-tap-highlight-color: transparent; }
+.spk-btn:active { transform: scale(0.95); }
+.spk-btn.selected { opacity: 1; box-shadow: 0 0 0 2px #fff2; }
+.spk-btn:not(.selected) { opacity: 0.4; }
+.spk-none { background: #2a2a3a; color: #888; border-color: #3a3a4a; }
+.spk-none.selected { opacity: 1; }
+.segments-scroll { flex: 1; overflow-y: auto; padding: 12px 20px; display: flex; flex-direction: column; gap: 6px; }
+.seg { background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 10px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.seg.labelled { border-color: #3a3a5a; }
+.seg-speaker { font-size: 11px; font-weight: 600; }
+.seg-text { font-size: 13px; color: #bbb; line-height: 1.5; }
+.review-footer { padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; border-top: 0.5px solid #2a2a3a; }
+
+/* ── LOADING ── */
+.loading-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 40px 20px; }
+.spinner { width: 56px; height: 56px; border: 3px solid #1a1a2e; border-top: 3px solid #6c63ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+.loading-text { font-size: 15px; color: #888; text-align: center; }
+.loading-steps { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px; }
+.lstep { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #555; }
+.lstep.done { color: #6c63ff; }
+.lstep.active { color: #e8e8e8; }
+.lstep-dot { width: 8px; height: 8px; border-radius: 50%; background: #2a2a3a; flex-shrink: 0; }
+.lstep.done .lstep-dot { background: #6c63ff; }
+.lstep.active .lstep-dot { background: #fff; animation: blink 0.8s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── RESULT ── */
+.result-header { padding: 16px 20px; border-bottom: 0.5px solid #2a2a3a; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.result-title { font-size: 16px; font-weight: 600; }
+.result-meta { font-size: 12px; color: #666; margin-top: 2px; }
+.copy-all-btn { background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 8px; color: #aaa; font-size: 12px; padding: 6px 12px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.notes-scroll { flex: 1; overflow-y: auto; padding: 16px 20px 32px; display: flex; flex-direction: column; gap: 16px; }
+.section-card { background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 14px; overflow: hidden; }
+.section-head { padding: 12px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 0.5px solid #2a2a3a; }
+.section-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.section-head h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: #ccc; }
+.section-body { padding: 12px 16px; font-size: 14px; line-height: 1.7; color: #bbb; }
+.section-body p { margin-bottom: 6px; }
+.section-body p:last-child { margin-bottom: 0; }
+.badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge { background: #2a2a3a; border-radius: 20px; padding: 5px 12px; font-size: 13px; color: #ccc; display: flex; align-items: center; gap: 6px; }
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #6c63ff; }
+.action-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid #1f1f2e; }
+.action-item:last-child { border-bottom: none; }
+.action-check { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #3a3a4a; flex-shrink: 0; margin-top: 2px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.action-check.checked { background: #6c63ff; border-color: #6c63ff; }
+.action-text { flex: 1; }
+.action-who { font-size: 11px; font-weight: 600; margin-top: 2px; }
+.action-when { font-size: 11px; color: #555; }
+.decision-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
+.dec-marker { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.new-btn { margin: 0 20px 24px; padding: 14px; background: transparent; border: 0.5px solid #2a2a3a; border-radius: 12px; color: #888; font-size: 14px; cursor: pointer; width: calc(100% - 40px); -webkit-tap-highlight-color: transparent; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">Meeting<span>Memo</span></div>
+    <div class="subtitle" id="headerSubtitle"></div>
+  </div>
+  <button class="settings-btn" onclick="openSettings()" id="settingsBtn">⚙️</button>
+</div>
+
+<!-- Step bar (hidden on settings/result) -->
+<div class="steps-bar" id="stepsBar">
+  <div class="step-pip active" id="pip1"><div class="step-pip-dot">1</div><div class="step-pip-label" id="pipLabel1"></div></div>
+  <div class="step-line" id="line1"></div>
+  <div class="step-pip" id="pip2"><div class="step-pip-dot">2</div><div class="step-pip-label" id="pipLabel2"></div></div>
+  <div class="step-line" id="line2"></div>
+  <div class="step-pip" id="pip3"><div class="step-pip-dot">3</div><div class="step-pip-label" id="pipLabel3"></div></div>
+</div>
+
+<!-- ══ SETTINGS SCREEN ══ -->
+<div class="screen" id="settingsScreen">
+  <div class="settings-area">
+    <div class="settings-back" onclick="closeSettings()">
+      ← <span id="settingsBackLabel"></span>
+    </div>
+
+    <!-- API Keys -->
+    <div class="settings-section">
+      <div class="settings-section-title" id="settingsSectionKeys"></div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-row-label" id="settingsAnthropicLabel"></div>
+          <div class="key-input-row">
+            <input type="password" id="anthropicKey" placeholder="sk-ant-..." autocomplete="off"
+              oninput="saveKeys()" onchange="saveKeys()" onpaste="setTimeout(saveKeys,50)" />
+            <div class="key-saved-dot" id="anthropicDot"></div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label" id="settingsOpenAILabel"></div>
+          <div class="key-input-row">
+            <input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off"
+              oninput="saveKeys()" onchange="saveKeys()" onpaste="setTimeout(saveKeys,50)" />
+            <div class="key-saved-dot" id="openaiDot"></div>
+          </div>
+        </div>
+        <div class="settings-hint" id="settingsKeysHint"></div>
+      </div>
+    </div>
+
+    <!-- Default attendees -->
+    <div class="settings-section">
+      <div class="settings-section-title" id="settingsSectionDefaults"></div>
+      <div class="settings-card">
+        <div class="settings-attendees-area">
+          <div class="attendee-row">
+            <input class="attendee-add-input" type="text" id="defaultAttendeeInput"
+              onkeydown="if(event.key==='Enter')addDefaultAttendee()"
+              placeholder="" id="defaultAttendeePlaceholder" />
+            <button class="add-btn" onclick="addDefaultAttendee()">+</button>
+          </div>
+          <div class="chips" id="defaultChips"></div>
+        </div>
+      </div>
+      <div style="font-size:11px; color:#555; padding: 0 4px;" id="settingsDefaultsHint"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SETUP SCREEN ══ -->
+<div class="screen active" id="setupScreen">
+  <div class="setup-area">
+
+    <div>
+      <div class="field-label" id="labelMeetingName"></div>
+      <input class="text-input" type="text" id="meetingName" />
+    </div>
+
+    <div>
+      <div class="field-label" id="labelLang"></div>
+      <div class="lang-toggle">
+        <button class="lang-opt active" id="langNL" onclick="setLang('nl')">Nederlands</button>
+        <button class="lang-opt" id="langEN" onclick="setLang('en')">English</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="field-label" id="labelAttendees"></div>
+
+      <!-- Add defaults button (shown when defaults exist) -->
+      <button class="add-defaults-btn" id="addDefaultsBtn" onclick="addDefaultsToMeeting()" style="display:none; margin-bottom:8px;">
+        <span>👥</span> <span id="addDefaultsBtnLabel"></span>
+      </button>
+
+      <div class="attendee-row">
+        <input class="attendee-add-input" type="text" id="attendeeInput"
+          onkeydown="if(event.key==='Enter')addAttendee()" />
+        <button class="add-btn" onclick="addAttendee()">+</button>
+      </div>
+      <div class="chips" id="attendeeChips"></div>
+    </div>
+
+    <button class="primary-btn" id="startRecordBtn" onclick="goToRecord()"></button>
+  </div>
+</div>
+
+<!-- ══ RECORD SCREEN ══ -->
+<div class="screen" id="recordScreen">
+  <div class="record-area">
+    <div class="rec-meeting-info">
+      <div class="rec-meeting-title" id="recMeetingTitle"></div>
+      <div class="rec-attendees-hint" id="recAttendeesHint"></div>
+    </div>
+    <svg class="wave" id="waveVis" viewBox="0 0 320 48" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="rec-btn-wrap">
+      <button class="rec-btn" id="recBtn" onclick="toggleRecording()">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+        <div class="stop-icon"></div>
+      </button>
+      <span class="rec-label" id="recLabel"></span>
+    </div>
+    <div class="timer" id="timer">00:00</div>
+    <div class="rec-status" id="recStatus"></div>
+    <div class="error-box" id="recErrorBox"></div>
+  </div>
+  <div class="transcribing-overlay" id="transcribingOverlay" style="display:none;">
+    <div class="transcribing-spinner"></div>
+    <div class="transcribing-label" id="transcribingLabel"></div>
+  </div>
+</div>
+
+<!-- ══ REVIEW SCREEN ══ -->
+<div class="screen" id="reviewScreen">
+  <div class="review-area">
+    <div class="review-header">
+      <div class="review-hint" id="reviewHint"></div>
+    </div>
+    <div class="speaker-bar" id="speakerBar">
+      <div class="speaker-bar-label" id="speakerBarLabel"></div>
+    </div>
+    <div class="segments-scroll" id="segmentsScroll"></div>
+    <div class="review-footer">
+      <div class="error-box" id="reviewErrorBox"></div>
+      <button class="primary-btn" id="reviewGenerateBtn" onclick="generateNotes(false)"></button>
+      <button class="secondary-btn" id="reviewSkipBtn" onclick="generateNotes(true)"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LOADING SCREEN ══ -->
+<div class="screen" id="loadingScreen">
+  <div class="loading-screen">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText"></div>
+    <div class="loading-steps">
+      <div class="lstep active" id="ls1"><div class="lstep-dot"></div><span id="lss1"></span></div>
+      <div class="lstep" id="ls2"><div class="lstep-dot"></div><span id="lss2"></span></div>
+      <div class="lstep" id="ls3"><div class="lstep-dot"></div><span id="lss3"></span></div>
+      <div class="lstep" id="ls4"><div class="lstep-dot"></div><span id="lss4"></span></div>
+      <div class="lstep" id="ls5"><div class="lstep-dot"></div><span id="lss5"></span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RESULT SCREEN ══ -->
+<div class="result-screen" id="resultScreen">
+  <div class="result-header">
+    <div>
+      <div class="result-title" id="resultTitle"></div>
+      <div class="result-meta" id="resultMeta"></div>
+    </div>
+    <button class="copy-all-btn" id="copyAllBtn" onclick="copyAll()"></button>
+  </div>
+  <div class="notes-scroll" id="notesContent"></div>
+  <button class="new-btn" id="newMeetingBtn" onclick="newMeeting()"></button>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let lang = 'nl';
+let attendees = [];          // current meeting attendees
+let defaultAttendees = [];   // saved in settings
+let isRecording = false;
+let timerInterval = null, waveInterval = null;
+let seconds = 0;
+let audioChunks = [], mediaRecorder = null;
+let transcript = '';
+let segments = [], selectedSpeaker = null;
+let notesData = null;
+let previousScreen = 'setupScreen';
+
+const COLORS = ['#6c63ff','#e24b4a','#1d9e75','#ef9f27','#d4537e','#378add','#ba7517','#3b6d11'];
+
+// ── Translations ──────────────────────────────────────────────────────────────
+const T = {
+  nl: {
+    subtitle: 'Automatische vergadernotulen met AI',
+    pip: ['Instellen','Opnemen','Nakijken'],
+    settingsBack: 'Terug',
+    settingsSectionKeys: 'API-sleutels',
+    settingsAnthropicLabel: 'Anthropic (voor notulen)',
+    settingsOpenAILabel: 'OpenAI (voor transcriptie)',
+    settingsKeysHint: 'Sleutels worden veilig opgeslagen in je browser. Anthropic: <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> · OpenAI: <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>',
+    settingsSectionDefaults: 'Vaste deelnemers',
+    settingsDefaultsHint: 'Deze deelnemers kun je met één tik toevoegen aan elke vergadering.',
+    defaultAttendeePlaceholder: 'Naam vaste deelnemer...',
+    labelMeetingName: 'Naam vergadering (optioneel)',
+    meetingPlaceholder: 'bijv. Wekelijks teamoverleg',
+    labelLang: 'Taal van de vergadering',
+    labelAttendees: 'Deelnemers',
+    attendeePlaceholder: 'Naam toevoegen...',
+    addDefaultsBtnLabel: (n) => `Voeg ${n} vaste deelnemer${n===1?'':'s'} toe`,
+    startBtn: 'Start opname →',
+    tapToRecord: 'Tik om op te nemen',
+    tapToStop: 'Tik om te stoppen',
+    recStopped: 'Verwerken...',
+    recStatusRecording: '🎙 Opname bezig — audio wordt lokaal opgeslagen',
+    transcribingLabel: 'Whisper transcribeert de opname…',
+    reviewHint: 'Tik een spreker aan, tik dan op een fragment om het te labellen. Of sla over.',
+    speakerBarLabel: 'Selecteer spreker:',
+    noSpeaker: '– geen –',
+    generateBtn: '✨ Genereer notulen',
+    skipBtn: 'Genereer zonder sprekerlabels',
+    loadingText: 'AI analyseert de vergadering…',
+    lsteps: ['Transcript verwerken','Aanwezigen herkennen','Beslissingen identificeren','Actiepunten opstellen','Samenvatting schrijven'],
+    copyAll: '📋 Kopieer alles', copied: '✅ Gekopieerd!',
+    newMeeting: '+ Nieuwe vergadering',
+    micError: 'Microfoon toegang geweigerd. Sta dit toe in de browserinstellingen.',
+    noOpenAI: 'Geen OpenAI sleutel gevonden. Voeg deze toe via ⚙️ Instellingen.',
+    whisperError: 'Transcriptie mislukt: ',
+    errorPrefix: 'Fout: ', errorSuffix: '\nControleer je API-sleutel in ⚙️ Instellingen.',
+    copyFail: 'Kopiëren mislukt.',
+    defaultName: 'Vergadering',
+    speechLang: 'nl', dateLocale: 'nl-NL',
+    durationFmt: (m,s) => m > 0 ? `${m} min ${s} sec` : `${s} sec`,
+    sections: { summary:'Samenvatting', attendees:'Aanwezigen', topics:'Besproken punten', decisions:'Beslissingen', actions:'Actiepunten', next:'Volgende vergadering' },
+    copyHeader: 'VERGADERNOTULEN',
+    copySections: { summary:'SAMENVATTING', attendees:'AANWEZIGEN', topics:'BESPROKEN PUNTEN', decisions:'BESLISSINGEN', actions:'ACTIEPUNTEN', next:'VOLGENDE VERGADERING' },
+  },
+  en: {
+    subtitle: 'Automatic meeting notes with AI',
+    pip: ['Setup','Record','Review'],
+    settingsBack: 'Back',
+    settingsSectionKeys: 'API keys',
+    settingsAnthropicLabel: 'Anthropic (for notes)',
+    settingsOpenAILabel: 'OpenAI (for transcription)',
+    settingsKeysHint: 'Keys are saved securely in your browser. Anthropic: <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> · OpenAI: <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>',
+    settingsSectionDefaults: 'Default attendees',
+    settingsDefaultsHint: 'Add these attendees to any meeting with one tap.',
+    defaultAttendeePlaceholder: 'Default attendee name...',
+    labelMeetingName: 'Meeting name (optional)',
+    meetingPlaceholder: 'e.g. Weekly team standup',
+    labelLang: 'Meeting language',
+    labelAttendees: 'Attendees',
+    attendeePlaceholder: 'Add name...',
+    addDefaultsBtnLabel: (n) => `Add ${n} default attendee${n===1?'':'s'}`,
+    startBtn: 'Start recording →',
+    tapToRecord: 'Tap to record',
+    tapToStop: 'Tap to stop',
+    recStopped: 'Processing...',
+    recStatusRecording: '🎙 Recording — audio saved locally',
+    transcribingLabel: 'Whisper is transcribing the recording…',
+    reviewHint: 'Select a speaker, then tap a segment to label it. Or skip.',
+    speakerBarLabel: 'Select speaker:',
+    noSpeaker: '– none –',
+    generateBtn: '✨ Generate notes',
+    skipBtn: 'Generate without speaker labels',
+    loadingText: 'AI is analysing the meeting…',
+    lsteps: ['Processing transcript','Identifying attendees','Identifying decisions','Drafting action items','Writing summary'],
+    copyAll: '📋 Copy all', copied: '✅ Copied!',
+    newMeeting: '+ New meeting',
+    micError: 'Microphone access denied. Allow it in browser settings.',
+    noOpenAI: 'No OpenAI key found. Add it via ⚙️ Settings.',
+    whisperError: 'Transcription failed: ',
+    errorPrefix: 'Error: ', errorSuffix: '\nCheck your API key in ⚙️ Settings.',
+    copyFail: 'Copy failed.',
+    defaultName: 'Meeting',
+    speechLang: 'en', dateLocale: 'en-GB',
+    durationFmt: (m,s) => m > 0 ? `${m} min ${s} sec` : `${s} sec`,
+    sections: { summary:'Summary', attendees:'Attendees', topics:'Topics discussed', decisions:'Decisions', actions:'Action items', next:'Next meeting' },
+    copyHeader: 'MEETING NOTES',
+    copySections: { summary:'SUMMARY', attendees:'ATTENDEES', topics:'TOPICS DISCUSSED', decisions:'DECISIONS', actions:'ACTION ITEMS', next:'NEXT MEETING' },
+  }
+};
+const tx = () => T[lang];
+
+// ── localStorage ──────────────────────────────────────────────────────────────
+function saveKeys() {
+  const ak = document.getElementById('anthropicKey').value.trim();
+  const ok = document.getElementById('openaiKey').value.trim();
+  if (ak) localStorage.setItem('mm_anthropic', ak);
+  if (ok) localStorage.setItem('mm_openai', ok);
+  document.getElementById('anthropicDot').className = 'key-saved-dot' + (ak ? ' visible' : '');
+  document.getElementById('openaiDot').className = 'key-saved-dot' + (ok ? ' visible' : '');
+}
+
+function loadKeys() {
+  const ak = localStorage.getItem('mm_anthropic') || '';
+  const ok = localStorage.getItem('mm_openai') || '';
+  document.getElementById('anthropicKey').value = ak;
+  document.getElementById('openaiKey').value = ok;
+  document.getElementById('anthropicDot').className = 'key-saved-dot' + (ak ? ' visible' : '');
+  document.getElementById('openaiDot').className = 'key-saved-dot' + (ok ? ' visible' : '');
+}
+
+function saveDefaultAttendees() {
+  localStorage.setItem('mm_defaults', JSON.stringify(defaultAttendees.map(a => a.name)));
+}
+
+function loadDefaultAttendees() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('mm_defaults') || '[]');
+    defaultAttendees = saved.map((name, i) => ({ name, color: COLORS[i % COLORS.length] }));
+  } catch(e) { defaultAttendees = []; }
+}
+
+// ── Language ──────────────────────────────────────────────────────────────────
+function setLang(l) {
+  lang = l;
+  document.getElementById('langNL').classList.toggle('active', l === 'nl');
+  document.getElementById('langEN').classList.toggle('active', l === 'en');
+  document.documentElement.lang = l;
+  applyTranslations();
+}
+
+function applyTranslations() {
+  const t = tx();
+  document.getElementById('headerSubtitle').textContent = t.subtitle;
+  ['1','2','3'].forEach(i => document.getElementById(`pipLabel${i}`).textContent = t.pip[i-1]);
+  // Settings
+  document.getElementById('settingsBackLabel').textContent = t.settingsBack;
+  document.getElementById('settingsSectionKeys').textContent = t.settingsSectionKeys;
+  document.getElementById('settingsAnthropicLabel').textContent = t.settingsAnthropicLabel;
+  document.getElementById('settingsOpenAILabel').textContent = t.settingsOpenAILabel;
+  document.getElementById('settingsKeysHint').innerHTML = t.settingsKeysHint;
+  document.getElementById('settingsSectionDefaults').textContent = t.settingsSectionDefaults;
+  document.getElementById('settingsDefaultsHint').textContent = t.settingsDefaultsHint;
+  document.getElementById('defaultAttendeeInput').placeholder = t.defaultAttendeePlaceholder;
+  // Setup
+  document.getElementById('labelMeetingName').textContent = t.labelMeetingName;
+  document.getElementById('meetingName').placeholder = t.meetingPlaceholder;
+  document.getElementById('labelLang').textContent = t.labelLang;
+  document.getElementById('labelAttendees').textContent = t.labelAttendees;
+  document.getElementById('attendeeInput').placeholder = t.attendeePlaceholder;
+  document.getElementById('startRecordBtn').textContent = t.startBtn;
+  // Record
+  document.getElementById('recLabel').textContent = isRecording ? t.tapToStop : t.tapToRecord;
+  document.getElementById('recStatus').textContent = t.recStatusRecording;
+  document.getElementById('transcribingLabel').textContent = t.transcribingLabel;
+  // Review
+  document.getElementById('reviewHint').textContent = t.reviewHint;
+  document.getElementById('speakerBarLabel').textContent = t.speakerBarLabel;
+  document.getElementById('reviewGenerateBtn').textContent = t.generateBtn;
+  document.getElementById('reviewSkipBtn').textContent = t.skipBtn;
+  // Loading
+  document.getElementById('loadingText').textContent = t.loadingText;
+  t.lsteps.forEach((s,i) => { const el=document.getElementById(`lss${i+1}`); if(el) el.textContent=s; });
+  // Result
+  document.getElementById('copyAllBtn').textContent = t.copyAll;
+  document.getElementById('newMeetingBtn').textContent = t.newMeeting;
+  // Add defaults button
+  updateAddDefaultsBtn();
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+function openSettings() {
+  // remember which screen we came from
+  const active = document.querySelector('.screen.active, .result-screen.active');
+  previousScreen = active ? active.id : 'setupScreen';
+  document.getElementById('stepsBar').style.display = 'none';
+  showScreen('settingsScreen');
+}
+
+function closeSettings() {
+  document.getElementById('stepsBar').style.display = '';
+  showScreen(previousScreen);
+}
+
+// ── Default attendees (Settings) ──────────────────────────────────────────────
+function addDefaultAttendee() {
+  const inp = document.getElementById('defaultAttendeeInput');
+  const name = inp.value.trim();
+  if (!name || defaultAttendees.find(a => a.name.toLowerCase() === name.toLowerCase())) { inp.value=''; return; }
+  defaultAttendees.push({ name, color: COLORS[defaultAttendees.length % COLORS.length] });
+  inp.value='';
+  saveDefaultAttendees();
+  renderDefaultChips();
+  updateAddDefaultsBtn();
+}
+
+function removeDefaultAttendee(i) {
+  defaultAttendees.splice(i,1);
+  defaultAttendees.forEach((a,idx) => a.color = COLORS[idx % COLORS.length]);
+  saveDefaultAttendees();
+  renderDefaultChips();
+  updateAddDefaultsBtn();
+}
+
+function renderDefaultChips() {
+  document.getElementById('defaultChips').innerHTML = defaultAttendees.map((a,i) =>
+    `<div class="chip"><div class="chip-color" style="background:${a.color};"></div>${a.name}<button class="chip-remove" onclick="removeDefaultAttendee(${i})">×</button></div>`
+  ).join('');
+}
+
+function updateAddDefaultsBtn() {
+  const btn = document.getElementById('addDefaultsBtn');
+  const label = document.getElementById('addDefaultsBtnLabel');
+  const unaddedDefaults = defaultAttendees.filter(d => !attendees.find(a => a.name === d.name));
+  if (unaddedDefaults.length > 0) {
+    btn.style.display = 'flex';
+    label.textContent = tx().addDefaultsBtnLabel(unaddedDefaults.length);
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+function addDefaultsToMeeting() {
+  const unaddedDefaults = defaultAttendees.filter(d => !attendees.find(a => a.name === d.name));
+  unaddedDefaults.forEach(d => {
+    attendees.push({ name: d.name, color: COLORS[attendees.length % COLORS.length] });
+  });
+  renderAttendeeChips();
+  updateAddDefaultsBtn();
+}
+
+// ── Meeting attendees (Setup) ─────────────────────────────────────────────────
+function addAttendee() {
+  const inp = document.getElementById('attendeeInput');
+  const name = inp.value.trim();
+  if (!name || attendees.find(a => a.name.toLowerCase() === name.toLowerCase())) { inp.value=''; return; }
+  attendees.push({ name, color: COLORS[attendees.length % COLORS.length] });
+  inp.value='';
+  renderAttendeeChips();
+  updateAddDefaultsBtn();
+}
+
+function removeAttendee(i) {
+  attendees.splice(i,1);
+  attendees.forEach((a,idx) => a.color = COLORS[idx % COLORS.length]);
+  renderAttendeeChips();
+  updateAddDefaultsBtn();
+}
+
+function renderAttendeeChips() {
+  document.getElementById('attendeeChips').innerHTML = attendees.map((a,i) =>
+    `<div class="chip"><div class="chip-color" style="background:${a.color};"></div>${a.name}<button class="chip-remove" onclick="removeAttendee(${i})">×</button></div>`
+  ).join('');
+}
+
+// ── Step indicator ────────────────────────────────────────────────────────────
+function setStep(n) {
+  [1,2,3].forEach(i => {
+    document.getElementById(`pip${i}`).className = 'step-pip' + (i<n?' done':i===n?' active':'');
+    if(i<3) document.getElementById(`line${i}`).className = 'step-line' + (i<n?' done':'');
+  });
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen, .result-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goToRecord() {
+  setStep(2); showScreen('recordScreen');
+  const t = tx();
+  document.getElementById('recMeetingTitle').textContent = document.getElementById('meetingName').value.trim() || t.defaultName;
+  document.getElementById('recAttendeesHint').textContent = attendees.map(a=>a.name).join(' · ');
+  document.getElementById('recLabel').textContent = t.tapToRecord;
+}
+
+// ── Recording ─────────────────────────────────────────────────────────────────
+function toggleRecording() { isRecording ? stopRecording() : startRecording(); }
+
+async function startRecording() {
+  document.getElementById('recErrorBox').className = 'error-box';
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch(e) { showRecError(tx().micError); return; }
+
+  audioChunks = [];
+  const opts = MediaRecorder.isTypeSupported('audio/webm') ? { mimeType:'audio/webm' }
+    : MediaRecorder.isTypeSupported('audio/mp4') ? { mimeType:'audio/mp4' } : {};
+  mediaRecorder = new MediaRecorder(stream, opts);
+  mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+  mediaRecorder.start(1000);
+
+  isRecording = true; seconds = 0;
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recLabel').textContent = tx().tapToStop;
+  document.getElementById('recLabel').classList.add('recording');
+  document.getElementById('timer').classList.add('visible');
+  document.getElementById('waveVis').classList.add('visible');
+  document.getElementById('recStatus').classList.add('visible');
+  startTimer(); startWave();
+}
+
+async function stopRecording() {
+  isRecording = false;
+  clearInterval(timerInterval); clearInterval(waveInterval);
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recLabel').textContent = tx().recStopped;
+  document.getElementById('recLabel').classList.remove('recording');
+  document.getElementById('waveVis').classList.remove('visible');
+  document.getElementById('recStatus').classList.remove('visible');
+
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    await new Promise(res => { mediaRecorder.onstop = res; mediaRecorder.stop(); });
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  }
+
+  // Show transcribing overlay
+  document.getElementById('transcribingOverlay').style.display = 'flex';
+  document.getElementById('recMeetingTitle').style.display = 'none';
+  document.getElementById('recAttendeesHint').style.display = 'none';
+  document.getElementById('timer').style.display = 'none';
+
+  try {
+    transcript = await transcribeWithWhisper();
+  } catch(e) {
+    document.getElementById('transcribingOverlay').style.display = 'none';
+    document.getElementById('recMeetingTitle').style.display = '';
+    document.getElementById('recAttendeesHint').style.display = '';
+    document.getElementById('timer').style.display = '';
+    showRecError(tx().whisperError + e.message);
+    return;
+  }
+
+  document.getElementById('transcribingOverlay').style.display = 'none';
+  buildSegments(transcript);
+  setStep(3); showScreen('reviewScreen');
+  renderReviewScreen();
+}
+
+async function transcribeWithWhisper() {
+  const key = localStorage.getItem('mm_openai') || '';
+  if (!key) throw new Error(tx().noOpenAI);
+  const mimeType = audioChunks[0]?.type || 'audio/webm';
+  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const blob = new Blob(audioChunks, { type: mimeType });
+  const fd = new FormData();
+  fd.append('file', blob, `rec.${ext}`);
+  fd.append('model', 'whisper-1');
+  fd.append('language', tx().speechLang);
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method:'POST', headers:{ 'Authorization':`Bearer ${key}` }, body:fd
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.text || '';
+}
+
+function startTimer() {
+  timerInterval = setInterval(() => {
+    seconds++;
+    document.getElementById('timer').textContent =
+      String(Math.floor(seconds/60)).padStart(2,'0') + ':' + String(seconds%60).padStart(2,'0');
+  }, 1000);
+}
+
+function startWave() {
+  const svg = document.getElementById('waveVis'); svg.innerHTML='';
+  const rects=[];
+  for(let i=0;i<24;i++){
+    const r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    r.setAttribute('x',4+i*13); r.setAttribute('width',8); r.setAttribute('rx',4); r.setAttribute('fill','#6c63ff');
+    svg.appendChild(r); rects.push(r);
+  }
+  const anim=()=>rects.forEach(r=>{const h=8+Math.random()*32;r.setAttribute('height',h);r.setAttribute('y',24-h/2);});
+  anim(); waveInterval=setInterval(anim,120);
+}
+
+function showRecError(msg) { const b=document.getElementById('recErrorBox'); b.textContent=msg; b.className='error-box visible'; }
+
+// ── Review ────────────────────────────────────────────────────────────────────
+function buildSegments(text) {
+  const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
+  segments = [];
+  for(let i=0;i<sentences.length;i+=2){
+    const chunk=sentences.slice(i,i+2).join(' ').trim();
+    if(chunk) segments.push({text:chunk, speaker:null});
+  }
+  if(!segments.length) segments.push({text, speaker:null});
+}
+
+function renderReviewScreen() {
+  const t=tx();
+  const bar=document.getElementById('speakerBar');
+  const label=document.getElementById('speakerBarLabel');
+  bar.innerHTML=''; bar.appendChild(label);
+  label.textContent=t.speakerBarLabel;
+  const noneBtn=document.createElement('button');
+  noneBtn.className='spk-btn spk-none'+(selectedSpeaker===null?' selected':'');
+  noneBtn.textContent=t.noSpeaker;
+  noneBtn.onclick=()=>selectSpeaker(null);
+  bar.appendChild(noneBtn);
+  attendees.forEach((a,i)=>{
+    const btn=document.createElement('button');
+    btn.className='spk-btn'+(selectedSpeaker===i?' selected':'');
+    btn.style.background=a.color; btn.textContent=a.name;
+    btn.onclick=()=>selectSpeaker(i);
+    bar.appendChild(btn);
+  });
+  renderSegments();
+  document.getElementById('reviewGenerateBtn').textContent=t.generateBtn;
+  document.getElementById('reviewSkipBtn').textContent=t.skipBtn;
+}
+
+function selectSpeaker(idx) {
+  selectedSpeaker=idx;
+  const btns=document.getElementById('speakerBar').querySelectorAll('.spk-btn');
+  btns.forEach((btn,i)=>btn.classList.toggle('selected',i===0?idx===null:idx===i-1));
+}
+
+function tapSegment(idx) {
+  segments[idx].speaker=selectedSpeaker===null?null:attendees[selectedSpeaker];
+  renderSegments();
+}
+
+function renderSegments() {
+  document.getElementById('segmentsScroll').innerHTML=segments.map((seg,i)=>{
+    const spk=seg.speaker;
+    return `<div class="seg${spk?' labelled':''}" onclick="tapSegment(${i})">
+      <div class="seg-speaker" style="color:${spk?spk.color:'#444'}">${spk?spk.name:'·'}</div>
+      <div class="seg-text">${seg.text}</div>
+    </div>`;
+  }).join('');
+}
+
+function buildLabelledTranscript(skip) {
+  if(skip) return transcript;
+  return segments.map(seg=>(seg.speaker?`[${seg.speaker.name}]: `:'')+seg.text).join('\n\n');
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+async function generateNotes(skipLabels) {
+  const anthropicKey = localStorage.getItem('mm_anthropic') || '';
+  const meetingName = document.getElementById('meetingName').value.trim() || tx().defaultName;
+  const labelledText = buildLabelledTranscript(skipLabels);
+  const attendeeNames = attendees.map(a=>a.name);
+
+  document.getElementById('reviewGenerateBtn').disabled=true;
+  showScreen('loadingScreen'); animateSteps();
+
+  const now=new Date(); const t=tx();
+  const dateStr=now.toLocaleDateString(t.dateLocale,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const timeStr=now.toLocaleTimeString(t.dateLocale,{hour:'2-digit',minute:'2-digit'});
+  const attCtx=attendeeNames.length
+    ?(lang==='nl'?`\n\nBekende deelnemers: ${attendeeNames.join(', ')}`:`\n\nKnown attendees: ${attendeeNames.join(', ')}`):'';
+
+  const prompt=lang==='nl'
+    ?`Je bent een professionele notulist. Analyseer het transcript en maak gestructureerde notulen in het Nederlands.${attCtx}\n\nTranscript (fragmenten met [Naam]: zijn gelabeld):\n"""\n${labelledText}\n"""\n\nGeef ALLEEN geldig JSON terug (geen markdown, geen uitleg):\n{"samenvatting":"2-3 zinnen","aanwezigen":["Naam"],"besproken_punten":["Punt"],"beslissingen":["Beslissing"],"actiepunten":[{"actie":"...","wie":"naam","wanneer":"..."}],"volgende_vergadering":"Datum of Nog niet gepland"}\nLege velden: [] of "".`
+    :`You are a professional meeting secretary. Analyse the transcript and produce structured meeting notes in English.${attCtx}\n\nTranscript (segments with [Name]: are labelled):\n"""\n${labelledText}\n"""\n\nReturn ONLY valid JSON (no markdown, no explanation):\n{"summary":"2-3 sentences","attendees":["Name"],"topics":["Topic"],"decisions":["Decision"],"actions":[{"action":"...","who":"name","when":"..."}],"next_meeting":"Date or Not yet scheduled"}\nEmpty fields: [] or "".`;
+
+  try {
+    let responseText;
+    if(anthropicKey && anthropicKey.startsWith('sk-ant-')) {
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1500,messages:[{role:'user',content:prompt}]})
+      });
+      const data=await res.json();
+      if(data.error) throw new Error(data.error.message);
+      responseText=data.content[0].text;
+    } else {
+      await new Promise(r=>setTimeout(r,2800));
+      responseText=getDemoNotes();
+    }
+    const clean=responseText.replace(/```json|```/g,'').trim();
+    notesData=JSON.parse(clean);
+    notesData._meta={title:meetingName,date:dateStr,time:timeStr,duration:t.durationFmt(Math.floor(seconds/60),seconds%60)};
+    renderNotes(notesData);
+    document.getElementById('stepsBar').style.display='none';
+    showScreen('resultScreen');
+  } catch(e) {
+    showScreen('reviewScreen');
+    document.getElementById('reviewGenerateBtn').disabled=false;
+    const eb=document.getElementById('reviewErrorBox');
+    eb.textContent=t.errorPrefix+e.message+t.errorSuffix;
+    eb.className='error-box visible';
+  }
+}
+
+function animateSteps() {
+  const ids=['ls1','ls2','ls3','ls4','ls5']; let i=0;
+  const next=()=>{if(i>0)document.getElementById(ids[i-1]).className='lstep done';if(i<ids.length){document.getElementById(ids[i]).className='lstep active';i++;setTimeout(next,600);}};
+  next();
+}
+
+// ── Render notes ──────────────────────────────────────────────────────────────
+function renderNotes(data) {
+  const c=document.getElementById('notesContent'); c.innerHTML='';
+  const t=tx(); const s=t.sections; const isNL=lang==='nl';
+  document.getElementById('resultTitle').textContent=data._meta.title;
+  document.getElementById('resultMeta').textContent=`${data._meta.date} · ${data._meta.time} · ${data._meta.duration}`;
+  document.getElementById('copyAllBtn').textContent=t.copyAll;
+  document.getElementById('newMeetingBtn').textContent=t.newMeeting;
+
+  const summary=isNL?data.samenvatting:data.summary, att=isNL?data.aanwezigen:data.attendees,
+    topics=isNL?data.besproken_punten:data.topics, decisions=isNL?data.beslissingen:data.decisions,
+    actions=isNL?data.actiepunten:data.actions, nextMtg=isNL?data.volgende_vergadering:data.next_meeting;
+
+  if(summary) c.innerHTML+=card('📋','#3a3a5a',s.summary,`<p>${summary}</p>`);
+  if(att?.length) c.innerHTML+=card('👥','#1a3a2a',s.attendees,`<div class="badge-row">${att.map(n=>`<div class="badge"><div class="badge-dot"></div>${n}</div>`).join('')}</div>`);
+  if(topics?.length) c.innerHTML+=card('💬','#2a2a4a',s.topics,topics.map(p=>`<p>• ${p}</p>`).join(''));
+  if(decisions?.length) c.innerHTML+=card('🎯','#2a3a1a',s.decisions,decisions.map(d=>`<div class="decision-item"><span class="dec-marker">✓</span><span>${d}</span></div>`).join(''));
+  if(actions?.length) {
+    const items=actions.map((a,i)=>{
+      const actie=isNL?a.actie:a.action, wie=isNL?a.wie:a.who, when=isNL?a.wanneer:a.when;
+      const color=attendees.find(x=>x.name===wie)?.color||'#6c63ff';
+      return `<div class="action-item"><div class="action-check" id="ac${i}" onclick="this.classList.toggle('checked')"></div><div class="action-text"><div>${actie}</div><div class="action-who" style="color:${color}">${wie||''}</div><div class="action-when">${when||''}</div></div></div>`;
+    }).join('');
+    c.innerHTML+=card('⚡','#3a2a1a',`${s.actions} (${actions.length})`,items);
+  }
+  if(nextMtg) c.innerHTML+=card('📅','#2a1a3a',s.next,`<p>${nextMtg}</p>`);
+}
+
+function card(icon,bg,title,body) {
+  return `<div class="section-card"><div class="section-head"><div class="section-icon" style="background:${bg};">${icon}</div><h3>${title}</h3></div><div class="section-body">${body}</div></div>`;
+}
+
+// ── Copy all ──────────────────────────────────────────────────────────────────
+function copyAll() {
+  if(!notesData) return;
+  const d=notesData; const t=tx(); const cs=t.copySections; const isNL=lang==='nl';
+  const summary=isNL?d.samenvatting:d.summary, att=isNL?d.aanwezigen:d.attendees,
+    topics=isNL?d.besproken_punten:d.topics, decisions=isNL?d.beslissingen:d.decisions,
+    actions=isNL?d.actiepunten:d.actions, nextMtg=isNL?d.volgende_vergadering:d.next_meeting;
+  let txt=`${t.copyHeader}: ${d._meta.title}\n${d._meta.date} · ${d._meta.time} · ${d._meta.duration}\n\n`;
+  if(summary) txt+=`${cs.summary}\n${summary}\n\n`;
+  if(att?.length) txt+=`${cs.attendees}\n${att.join(', ')}\n\n`;
+  if(topics?.length) txt+=`${cs.topics}\n${topics.map(p=>'• '+p).join('\n')}\n\n`;
+  if(decisions?.length) txt+=`${cs.decisions}\n${decisions.map(p=>'✓ '+p).join('\n')}\n\n`;
+  if(actions?.length) txt+=`${cs.actions}\n${actions.map(a=>`[ ] ${isNL?a.actie:a.action} — ${isNL?a.wie:a.who} — ${isNL?a.wanneer:a.when}`).join('\n')}\n\n`;
+  if(nextMtg) txt+=`${cs.next}\n${nextMtg}\n`;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const btn=document.getElementById('copyAllBtn');
+    btn.textContent=t.copied; setTimeout(()=>btn.textContent=t.copyAll,2000);
+  }).catch(()=>alert(t.copyFail));
+}
+
+// ── New meeting ───────────────────────────────────────────────────────────────
+function newMeeting() {
+  transcript=''; segments=[]; audioChunks=[]; seconds=0; notesData=null; selectedSpeaker=null;
+  attendees=[]; renderAttendeeChips();
+  document.getElementById('timer').classList.remove('visible');
+  document.getElementById('timer').textContent='00:00';
+  document.getElementById('timer').style.display='';
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recLabel').classList.remove('recording');
+  document.getElementById('recMeetingTitle').style.display='';
+  document.getElementById('recAttendeesHint').style.display='';
+  document.getElementById('transcribingOverlay').style.display='none';
+  document.getElementById('meetingName').value='';
+  document.getElementById('recErrorBox').className='error-box';
+  document.getElementById('reviewErrorBox').className='error-box';
+  document.getElementById('reviewGenerateBtn').disabled=false;
+  document.getElementById('stepsBar').style.display='';
+  setStep(1); applyTranslations(); showScreen('setupScreen');
+}
+
+// ── Demo fallback ─────────────────────────────────────────────────────────────
+function getDemoNotes() {
+  return lang==='nl'
+    ?JSON.stringify({samenvatting:"Statusvergadering over CRM-implementatie. Project op schema voor livegang 1 februari, binnen budget van €15.000.",aanwezigen:["Sarah (Projectmanager)","Tom (IT)","Lisa (Marketing)","Peter (Finance)"],besproken_punten:["CRM-implementatie 80% gereed, bugs in rapportagemodule","Trainingsplanning marketing voor campagne maart","Budgetstatus: €15.000 beschikbaar"],beslissingen:["Livegang CRM op 1 februari","Trainingen week 5 en 6"],actiepunten:[{actie:"Bugs rapportagemodule oplossen",wie:"Tom",wanneer:"Vrijdag"},{actie:"Trainingen inplannen week 5-6",wie:"Lisa",wanneer:"Week 5-6"},{actie:"Budgetupdate sturen naar directie",wie:"Peter",wanneer:"Volgende week"}],volgende_vergadering:"Donderdag 23 januari om 10:00 uur"})
+    :JSON.stringify({summary:"Status meeting on CRM implementation. Project on track for February 1st go-live, within the €15,000 budget.",attendees:["Sarah (Project Manager)","Tom (IT)","Lisa (Marketing)","Peter (Finance)"],topics:["CRM implementation 80% complete, bugs in reporting module","Training schedule for marketing ahead of March campaign","Budget status: €15,000 remaining"],decisions:["CRM go-live set for February 1st","Training sessions scheduled for weeks 5 and 6"],actions:[{action:"Fix reporting module bugs",who:"Tom",when:"Friday"},{action:"Schedule training sessions weeks 5–6",who:"Lisa",when:"Weeks 5–6"},{action:"Send budget update to management",who:"Peter",when:"Next week"}],next_meeting:"Thursday January 23rd at 10:00 AM"});
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadKeys();
+loadDefaultAttendees();
+renderDefaultChips();
+applyTranslations();
+</script>
+</body>
+</html>
