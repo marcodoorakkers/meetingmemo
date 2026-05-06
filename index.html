@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MeetingMemo">
+<meta name="theme-color" content="#0f1117">
+<title>MeetingMemo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117; color: #e8e8e8;
+    min-height: 100vh; min-height: 100dvh;
+    display: flex; flex-direction: column;
+    max-width: 480px; margin: 0 auto;
+  }
+  .header {
+    padding: 16px 20px 12px; border-bottom: 0.5px solid #2a2a3a;
+    position: sticky; top: 0; background: #0f1117; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .header-left .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: #fff; }
+  .header-left .logo span { color: #6c63ff; }
+  .header-left .subtitle { font-size: 12px; color: #666; margin-top: 2px; }
+  .lang-toggle {
+    display: flex; background: #1a1a2e; border: 0.5px solid #2a2a3a;
+    border-radius: 20px; padding: 3px; gap: 2px; flex-shrink: 0;
+  }
+  .lang-btn {
+    padding: 5px 12px; border-radius: 16px; border: none;
+    background: transparent; color: #666; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .lang-btn.active { background: #6c63ff; color: #fff; }
+  .screen { display: none; flex-direction: column; flex: 1; }
+  .screen.active { display: flex; }
+  .record-area {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 20px; gap: 24px;
+  }
+  .meeting-name-input {
+    width: 100%; background: #1a1a2e; border: 0.5px solid #2a2a3a;
+    border-radius: 12px; padding: 14px 16px; color: #e8e8e8;
+    font-size: 15px; outline: none; -webkit-appearance: none;
+  }
+  .meeting-name-input:focus { border-color: #6c63ff; }
+  .meeting-name-input::placeholder { color: #444; }
+  .rec-btn-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .rec-btn {
+    width: 100px; height: 100px; border-radius: 50%; border: none;
+    background: #6c63ff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s, background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .rec-btn:active { transform: scale(0.95); }
+  .rec-btn.recording { background: #e24b4a; animation: pulse 1.5s infinite; }
+  .rec-btn svg { width: 36px; height: 36px; fill: white; }
+  .rec-btn .stop-icon { width: 28px; height: 28px; background: white; border-radius: 4px; display: none; }
+  .rec-btn.recording svg { display: none; }
+  .rec-btn.recording .stop-icon { display: block; }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(226,75,74,0.4); }
+    50% { box-shadow: 0 0 0 20px rgba(226,75,74,0); }
+  }
+  .rec-label { font-size: 13px; color: #666; }
+  .rec-label.recording { color: #e24b4a; }
+  .timer { font-size: 32px; font-weight: 300; letter-spacing: 4px; color: #aaa; font-variant-numeric: tabular-nums; display: none; }
+  .timer.visible { display: block; }
+  .wave { width: 100%; height: 48px; display: none; }
+  .wave.visible { display: block; }
+  .transcribing-box {
+    background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 12px;
+    padding: 14px 16px; width: 100%; font-size: 13px; color: #888;
+    min-height: 80px; max-height: 160px; overflow-y: auto; line-height: 1.6;
+  }
+  .generate-btn {
+    width: 100%; padding: 16px; background: #6c63ff; border: none;
+    border-radius: 12px; color: white; font-size: 16px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s; display: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .generate-btn:active { opacity: 0.85; }
+  .generate-btn.visible { display: block; }
+  .generate-btn:disabled { opacity: 0.5; }
+  .loading-screen {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px; padding: 40px 20px;
+  }
+  .spinner { width: 56px; height: 56px; border: 3px solid #1a1a2e; border-top: 3px solid #6c63ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 15px; color: #888; text-align: center; }
+  .loading-steps { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px; }
+  .step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #555; }
+  .step.done { color: #6c63ff; }
+  .step.active { color: #e8e8e8; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #2a2a3a; flex-shrink: 0; }
+  .step.done .step-dot { background: #6c63ff; }
+  .step.active .step-dot { background: #fff; animation: blink 0.8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .result-screen { flex: 1; display: none; flex-direction: column; }
+  .result-screen.active { display: flex; }
+  .result-header {
+    padding: 16px 20px; border-bottom: 0.5px solid #2a2a3a;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .result-title { font-size: 16px; font-weight: 600; }
+  .result-meta { font-size: 12px; color: #666; margin-top: 2px; }
+  .copy-all-btn { background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 8px; color: #aaa; font-size: 12px; padding: 6px 12px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .notes-scroll { flex: 1; overflow-y: auto; padding: 16px 20px 32px; display: flex; flex-direction: column; gap: 16px; }
+  .section-card { background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 14px; overflow: hidden; }
+  .section-head { padding: 12px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 0.5px solid #2a2a3a; }
+  .section-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .section-head h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: #ccc; }
+  .section-body { padding: 12px 16px; font-size: 14px; line-height: 1.7; color: #bbb; }
+  .section-body p { margin-bottom: 6px; }
+  .section-body p:last-child { margin-bottom: 0; }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { background: #2a2a3a; border-radius: 20px; padding: 5px 12px; font-size: 13px; color: #ccc; display: flex; align-items: center; gap: 6px; }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #6c63ff; }
+  .action-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid #1f1f2e; }
+  .action-item:last-child { border-bottom: none; }
+  .action-check { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #3a3a4a; flex-shrink: 0; margin-top: 2px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  .action-check.checked { background: #6c63ff; border-color: #6c63ff; }
+  .action-text { flex: 1; }
+  .action-who { font-size: 11px; color: #6c63ff; font-weight: 600; margin-top: 2px; }
+  .action-when { font-size: 11px; color: #555; }
+  .decision-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
+  .dec-marker { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .new-btn { margin: 0 20px 24px; padding: 14px; background: transparent; border: 0.5px solid #2a2a3a; border-radius: 12px; color: #888; font-size: 14px; cursor: pointer; width: calc(100% - 40px); -webkit-tap-highlight-color: transparent; }
+  .error-box { background: #2a1a1a; border: 0.5px solid #e24b4a44; border-radius: 12px; padding: 14px 16px; font-size: 13px; color: #e24b4a; width: 100%; display: none; line-height: 1.5; }
+  .error-box.visible { display: block; }
+  .api-key-section { padding: 14px 20px 0; }
+  .api-key-label { font-size: 12px; color: #555; margin-bottom: 6px; }
+  .api-key-input { width: 100%; background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 10px; padding: 10px 14px; color: #e8e8e8; font-size: 13px; font-family: monospace; outline: none; -webkit-appearance: none; }
+  .api-key-input:focus { border-color: #6c63ff; }
+  .api-key-hint { font-size: 11px; color: #444; margin-top: 5px; }
+  .api-key-hint a { color: #6c63ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">Meeting<span>Memo</span></div>
+    <div class="subtitle" id="headerSubtitle"></div>
+  </div>
+  <div class="lang-toggle">
+    <button class="lang-btn active" id="btnNL" onclick="setLang('nl')">NL</button>
+    <button class="lang-btn" id="btnEN" onclick="setLang('en')">EN</button>
+  </div>
+</div>
+
+<div class="api-key-section">
+  <div class="api-key-label" id="apiKeyLabel"></div>
+  <input class="api-key-input" type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off" />
+  <div class="api-key-hint" id="apiKeyHint"></div>
+</div>
+
+<!-- RECORD SCREEN -->
+<div class="screen active" id="recordScreen">
+  <div class="record-area">
+    <input class="meeting-name-input" id="meetingName" type="text" />
+    <svg class="wave" id="waveVis" viewBox="0 0 320 48" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="rec-btn-wrap">
+      <button class="rec-btn" id="recBtn" onclick="toggleRecording()">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+        <div class="stop-icon"></div>
+      </button>
+      <span class="rec-label" id="recLabel"></span>
+    </div>
+    <div class="timer" id="timer">00:00</div>
+    <div class="transcribing-box" id="transcriptBox" style="display:none;">
+      <span id="transcriptText" style="color:#555;"></span>
+    </div>
+    <div class="error-box" id="errorBox"></div>
+    <button class="generate-btn" id="generateBtn" onclick="generateNotes()"></button>
+  </div>
+</div>
+
+<!-- LOADING SCREEN -->
+<div class="screen" id="loadingScreen">
+  <div class="loading-screen">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText"></div>
+    <div class="loading-steps">
+      <div class="step active" id="step1"><div class="step-dot"></div><span id="s1"></span></div>
+      <div class="step" id="step2"><div class="step-dot"></div><span id="s2"></span></div>
+      <div class="step" id="step3"><div class="step-dot"></div><span id="s3"></span></div>
+      <div class="step" id="step4"><div class="step-dot"></div><span id="s4"></span></div>
+      <div class="step" id="step5"><div class="step-dot"></div><span id="s5"></span></div>
+    </div>
+  </div>
+</div>
+
+<!-- RESULT SCREEN -->
+<div class="result-screen" id="resultScreen">
+  <div class="result-header">
+    <div>
+      <div class="result-title" id="resultTitle"></div>
+      <div class="result-meta" id="resultMeta"></div>
+    </div>
+    <button class="copy-all-btn" id="copyAllBtn" onclick="copyAll()"></button>
+  </div>
+  <div class="notes-scroll" id="notesContent"></div>
+  <button class="new-btn" id="newMeetingBtn" onclick="newMeeting()"></button>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let lang = 'nl';
+let isRecording = false;
+let timerInterval = null, waveInterval = null;
+let seconds = 0;
+let recognition = null;
+let transcript = '';
+let notesData = null;
+
+// ── Translations ──────────────────────────────────────────────────────────────
+const T = {
+  nl: {
+    subtitle: 'Automatische vergadernotulen met AI',
+    apiKeyLabel: 'Anthropic API-sleutel',
+    apiKeyHint: 'Aanvragen via <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> · Zonder sleutel werkt de demo',
+    meetingPlaceholder: 'Naam van de vergadering (optioneel)',
+    tapToRecord: 'Tik om op te nemen',
+    tapToStop: 'Tik om te stoppen',
+    recordingStopped: 'Opname gestopt',
+    transcriptPlaceholder: 'Spreek en de tekst verschijnt hier...',
+    noSpeechApi: 'Live transcriptie niet beschikbaar in deze browser. Gebruik Chrome of Edge.',
+    generateBtn: '✨ Genereer notulen',
+    generateBtnDemo: '✨ Genereer notulen (demo)',
+    loadingText: 'AI analyseert de vergadering…',
+    steps: ['Transcript verwerken','Aanwezigen herkennen','Beslissingen identificeren','Actiepunten opstellen','Samenvatting schrijven'],
+    copyAll: '📋 Kopieer alles',
+    copied: '✅ Gekopieerd!',
+    newMeeting: '+ Nieuwe vergadering',
+    micError: 'Microfoon toegang geweigerd. Sta microfoon toe in browserinstellingen.',
+    errorPrefix: 'Fout: ',
+    errorSuffix: '\nControleer je API-sleutel of gebruik de demo zonder sleutel.',
+    copyFail: 'Kopiëren mislukt. Selecteer de tekst handmatig.',
+    defaultMeetingName: 'Vergadering',
+    sections: { summary:'Samenvatting', attendees:'Aanwezigen', topics:'Besproken punten', decisions:'Beslissingen', actions:'Actiepunten', next:'Volgende vergadering' },
+    copyHeader: 'VERGADERNOTULEN',
+    copySections: { summary:'SAMENVATTING', attendees:'AANWEZIGEN', topics:'BESPROKEN PUNTEN', decisions:'BESLISSINGEN', actions:'ACTIEPUNTEN', next:'VOLGENDE VERGADERING' },
+    speechLang: 'nl-NL',
+    dateLocale: 'nl-NL',
+    durationFmt: (m,s) => m > 0 ? `${m} min ${s} sec` : `${s} sec`,
+  },
+  en: {
+    subtitle: 'Automatic meeting notes with AI',
+    apiKeyLabel: 'Anthropic API key',
+    apiKeyHint: 'Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> · Without a key the demo works',
+    meetingPlaceholder: 'Meeting name (optional)',
+    tapToRecord: 'Tap to record',
+    tapToStop: 'Tap to stop',
+    recordingStopped: 'Recording stopped',
+    transcriptPlaceholder: 'Speak and the text will appear here...',
+    noSpeechApi: 'Live transcription not available in this browser. Use Chrome or Edge.',
+    generateBtn: '✨ Generate notes',
+    generateBtnDemo: '✨ Generate notes (demo)',
+    loadingText: 'AI is analysing the meeting…',
+    steps: ['Processing transcript','Identifying attendees','Identifying decisions','Drafting action items','Writing summary'],
+    copyAll: '📋 Copy all',
+    copied: '✅ Copied!',
+    newMeeting: '+ New meeting',
+    micError: 'Microphone access denied. Allow microphone access in browser settings.',
+    errorPrefix: 'Error: ',
+    errorSuffix: '\nCheck your API key or use the demo without a key.',
+    copyFail: 'Copy failed. Please select the text manually.',
+    defaultMeetingName: 'Meeting',
+    sections: { summary:'Summary', attendees:'Attendees', topics:'Topics discussed', decisions:'Decisions', actions:'Action items', next:'Next meeting' },
+    copyHeader: 'MEETING NOTES',
+    copySections: { summary:'SUMMARY', attendees:'ATTENDEES', topics:'TOPICS DISCUSSED', decisions:'DECISIONS', actions:'ACTION ITEMS', next:'NEXT MEETING' },
+    speechLang: 'en-GB',
+    dateLocale: 'en-GB',
+    durationFmt: (m,s) => m > 0 ? `${m} min ${s} sec` : `${s} sec`,
+  }
+};
+const tx = () => T[lang];
+
+// ── Language toggle ───────────────────────────────────────────────────────────
+function setLang(l) {
+  lang = l;
+  document.getElementById('btnNL').classList.toggle('active', l === 'nl');
+  document.getElementById('btnEN').classList.toggle('active', l === 'en');
+  document.documentElement.lang = l;
+  applyTranslations();
+}
+
+function applyTranslations() {
+  const t = tx();
+  document.getElementById('headerSubtitle').textContent = t.subtitle;
+  document.getElementById('apiKeyLabel').textContent = t.apiKeyLabel;
+  document.getElementById('apiKeyHint').innerHTML = t.apiKeyHint;
+  document.getElementById('meetingName').placeholder = t.meetingPlaceholder;
+  document.getElementById('recLabel').textContent = isRecording ? t.tapToStop : t.tapToRecord;
+  if (!transcript) document.getElementById('transcriptText').textContent = t.transcriptPlaceholder;
+  document.getElementById('loadingText').textContent = t.loadingText;
+  t.steps.forEach((s, i) => { document.getElementById(`s${i+1}`).textContent = s; });
+  document.getElementById('copyAllBtn').textContent = t.copyAll;
+  document.getElementById('newMeetingBtn').textContent = t.newMeeting;
+  const genBtn = document.getElementById('generateBtn');
+  if (genBtn.classList.contains('visible')) {
+    genBtn.textContent = transcript.trim().length > 20 ? t.generateBtn : t.generateBtnDemo;
+  }
+}
+
+// ── Recording ─────────────────────────────────────────────────────────────────
+function toggleRecording() { isRecording ? stopRecording() : startRecording(); }
+
+async function startRecording() {
+  transcript = '';
+  document.getElementById('errorBox').className = 'error-box';
+  try { await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch(e) { showError(tx().micError); return; }
+
+  isRecording = true; seconds = 0;
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recLabel').textContent = tx().tapToStop;
+  document.getElementById('recLabel').classList.add('recording');
+  document.getElementById('timer').classList.add('visible');
+  document.getElementById('waveVis').classList.add('visible');
+  document.getElementById('transcriptBox').style.display = 'block';
+  document.getElementById('transcriptText').textContent = tx().transcriptPlaceholder;
+  document.getElementById('generateBtn').classList.remove('visible');
+  startTimer(); startWave(); startSpeechRecognition();
+}
+
+function stopRecording() {
+  isRecording = false;
+  if (recognition) { try { recognition.stop(); } catch(e){} recognition = null; }
+  clearInterval(timerInterval); clearInterval(waveInterval);
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recLabel').textContent = tx().recordingStopped;
+  document.getElementById('recLabel').classList.remove('recording');
+  document.getElementById('waveVis').classList.remove('visible');
+  const btn = document.getElementById('generateBtn');
+  btn.classList.add('visible');
+  btn.textContent = transcript.trim().length > 20 ? tx().generateBtn : tx().generateBtnDemo;
+}
+
+function startSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('transcriptText').textContent = tx().noSpeechApi; return; }
+  recognition = new SR();
+  recognition.lang = tx().speechLang;
+  recognition.continuous = true; recognition.interimResults = true;
+  let final = '';
+  recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
+    }
+    transcript = final + interim;
+    const el = document.getElementById('transcriptText');
+    el.style.color = '#bbb';
+    el.textContent = transcript || tx().transcriptPlaceholder;
+    el.parentElement.scrollTop = el.parentElement.scrollHeight;
+  };
+  recognition.onerror = (e) => { if (e.error !== 'no-speech' && e.error !== 'aborted') console.warn(e.error); };
+  recognition.onend = () => { if (isRecording) { try { recognition.start(); } catch(e){} } };
+  try { recognition.start(); } catch(e) {}
+}
+
+function startTimer() {
+  timerInterval = setInterval(() => {
+    seconds++;
+    document.getElementById('timer').textContent =
+      String(Math.floor(seconds/60)).padStart(2,'0') + ':' + String(seconds%60).padStart(2,'0');
+  }, 1000);
+}
+
+function startWave() {
+  const svg = document.getElementById('waveVis');
+  svg.innerHTML = '';
+  const rects = [];
+  for (let i = 0; i < 24; i++) {
+    const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    r.setAttribute('x', 4 + i * 13); r.setAttribute('width', 8); r.setAttribute('rx', 4); r.setAttribute('fill','#6c63ff');
+    svg.appendChild(r); rects.push(r);
+  }
+  const anim = () => rects.forEach(r => { const h = 8 + Math.random()*32; r.setAttribute('height', h); r.setAttribute('y', 24-h/2); });
+  anim(); waveInterval = setInterval(anim, 120);
+}
+
+function showError(msg) { const b = document.getElementById('errorBox'); b.textContent = msg; b.className = 'error-box visible'; }
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+async function generateNotes() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const meetingName = document.getElementById('meetingName').value.trim() || tx().defaultMeetingName;
+  const text = transcript.trim() || getDemoTranscript();
+  document.getElementById('generateBtn').disabled = true;
+  showScreen('loadingScreen'); animateSteps();
+
+  const now = new Date();
+  const t = tx();
+  const dateStr = now.toLocaleDateString(t.dateLocale, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const timeStr = now.toLocaleTimeString(t.dateLocale, { hour:'2-digit', minute:'2-digit' });
+
+  const prompt = lang === 'nl'
+    ? `Je bent een professionele notulist. Analyseer het volgende vergadertranscript en maak gestructureerde notulen in het Nederlands.\n\nTranscript:\n"""\n${text}\n"""\n\nGeef je antwoord ALLEEN als geldig JSON (geen markdown, geen uitleg, geen backticks):\n{\n  "samenvatting": "2-3 zinnen",\n  "aanwezigen": ["Naam"],\n  "besproken_punten": ["Punt"],\n  "beslissingen": ["Beslissing"],\n  "actiepunten": [{"actie":"...","wie":"...","wanneer":"..."}],\n  "volgende_vergadering": "Datum of Nog niet gepland"\n}\nLege velden: [] of "".`
+    : `You are a professional meeting secretary. Analyse the transcript and produce structured meeting notes in English.\n\nTranscript:\n"""\n${text}\n"""\n\nRespond ONLY with valid JSON (no markdown, no explanation, no backticks):\n{\n  "summary": "2-3 sentences",\n  "attendees": ["Name"],\n  "topics": ["Topic"],\n  "decisions": ["Decision"],\n  "actions": [{"action":"...","who":"...","when":"..."}],\n  "next_meeting": "Date or Not yet scheduled"\n}\nEmpty fields: [] or "".`;
+
+  try {
+    let responseText;
+    if (apiKey && apiKey.startsWith('sk-ant-')) {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1500, messages:[{ role:'user', content:prompt }] })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      responseText = data.content[0].text;
+    } else {
+      await new Promise(r => setTimeout(r, 2800));
+      responseText = getDemoNotes();
+    }
+    const clean = responseText.replace(/```json|```/g,'').trim();
+    notesData = JSON.parse(clean);
+    notesData._meta = { title:meetingName, date:dateStr, time:timeStr, duration:t.durationFmt(Math.floor(seconds/60), seconds%60) };
+    renderNotes(notesData); showScreen('resultScreen');
+  } catch(e) {
+    showScreen('recordScreen');
+    document.getElementById('generateBtn').disabled = false;
+    showError(t.errorPrefix + e.message + t.errorSuffix);
+    document.getElementById('generateBtn').classList.add('visible');
+  }
+}
+
+function animateSteps() {
+  const ids = ['step1','step2','step3','step4','step5']; let i = 0;
+  const next = () => {
+    if (i > 0) document.getElementById(ids[i-1]).className = 'step done';
+    if (i < ids.length) { document.getElementById(ids[i]).className = 'step active'; i++; setTimeout(next, 600); }
+  };
+  next();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderNotes(data) {
+  const c = document.getElementById('notesContent');
+  c.innerHTML = '';
+  const t = tx(); const s = t.sections; const isNL = lang === 'nl';
+  document.getElementById('resultTitle').textContent = data._meta.title;
+  document.getElementById('resultMeta').textContent = `${data._meta.date} · ${data._meta.time} · ${data._meta.duration}`;
+  document.getElementById('copyAllBtn').textContent = t.copyAll;
+  document.getElementById('newMeetingBtn').textContent = t.newMeeting;
+
+  const summary   = isNL ? data.samenvatting : data.summary;
+  const attendees = isNL ? data.aanwezigen   : data.attendees;
+  const topics    = isNL ? data.besproken_punten : data.topics;
+  const decisions = isNL ? data.beslissingen : data.decisions;
+  const actions   = isNL ? data.actiepunten  : data.actions;
+  const nextMtg   = isNL ? data.volgende_vergadering : data.next_meeting;
+
+  if (summary) c.innerHTML += card('📋','#3a3a5a', s.summary, `<p>${summary}</p>`);
+  if (attendees?.length) c.innerHTML += card('👥','#1a3a2a', s.attendees, `<div class="badge-row">${attendees.map(n=>`<div class="badge"><div class="badge-dot"></div>${n}</div>`).join('')}</div>`);
+  if (topics?.length) c.innerHTML += card('💬','#2a2a4a', s.topics, topics.map(p=>`<p>• ${p}</p>`).join(''));
+  if (decisions?.length) c.innerHTML += card('🎯','#2a3a1a', s.decisions, decisions.map(d=>`<div class="decision-item"><span class="dec-marker">✓</span><span>${d}</span></div>`).join(''));
+  if (actions?.length) {
+    const items = actions.map((a,i) => {
+      const actie = isNL ? a.actie : a.action;
+      const wie   = isNL ? a.wie   : a.who;
+      const when  = isNL ? a.wanneer : a.when;
+      return `<div class="action-item"><div class="action-check" id="ac${i}" onclick="this.classList.toggle('checked')"></div><div class="action-text"><div>${actie}</div><div class="action-who">${wie||''}</div><div class="action-when">${when||''}</div></div></div>`;
+    }).join('');
+    c.innerHTML += card('⚡','#3a2a1a', `${s.actions} (${actions.length})`, items);
+  }
+  if (nextMtg) c.innerHTML += card('📅','#2a1a3a', s.next, `<p>${nextMtg}</p>`);
+}
+
+function card(icon, bg, title, body) {
+  return `<div class="section-card"><div class="section-head"><div class="section-icon" style="background:${bg};">${icon}</div><h3>${title}</h3></div><div class="section-body">${body}</div></div>`;
+}
+
+// ── Copy all ──────────────────────────────────────────────────────────────────
+function copyAll() {
+  if (!notesData) return;
+  const d = notesData; const t = tx(); const cs = t.copySections; const isNL = lang === 'nl';
+  const summary   = isNL ? d.samenvatting : d.summary;
+  const attendees = isNL ? d.aanwezigen   : d.attendees;
+  const topics    = isNL ? d.besproken_punten : d.topics;
+  const decisions = isNL ? d.beslissingen : d.decisions;
+  const actions   = isNL ? d.actiepunten  : d.actions;
+  const nextMtg   = isNL ? d.volgende_vergadering : d.next_meeting;
+
+  let txt = `${t.copyHeader}: ${d._meta.title}\n${d._meta.date} · ${d._meta.time} · ${d._meta.duration}\n\n`;
+  if (summary)       txt += `${cs.summary}\n${summary}\n\n`;
+  if (attendees?.length) txt += `${cs.attendees}\n${attendees.join(', ')}\n\n`;
+  if (topics?.length)    txt += `${cs.topics}\n${topics.map(p=>'• '+p).join('\n')}\n\n`;
+  if (decisions?.length) txt += `${cs.decisions}\n${decisions.map(p=>'✓ '+p).join('\n')}\n\n`;
+  if (actions?.length)   txt += `${cs.actions}\n${actions.map(a => `[ ] ${isNL?a.actie:a.action} — ${isNL?a.wie:a.who} — ${isNL?a.wanneer:a.when}`).join('\n')}\n\n`;
+  if (nextMtg)       txt += `${cs.next}\n${nextMtg}\n`;
+
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.getElementById('copyAllBtn');
+    btn.textContent = t.copied;
+    setTimeout(() => btn.textContent = t.copyAll, 2000);
+  }).catch(() => alert(t.copyFail));
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen, .result-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function newMeeting() {
+  transcript = ''; seconds = 0; notesData = null;
+  document.getElementById('timer').classList.remove('visible');
+  document.getElementById('timer').textContent = '00:00';
+  document.getElementById('transcriptBox').style.display = 'none';
+  const gb = document.getElementById('generateBtn');
+  gb.classList.remove('visible'); gb.disabled = false;
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recLabel').classList.remove('recording');
+  document.getElementById('meetingName').value = '';
+  document.getElementById('errorBox').className = 'error-box';
+  applyTranslations();
+  showScreen('recordScreen');
+}
+
+// ── Demo data ─────────────────────────────────────────────────────────────────
+function getDemoTranscript() {
+  return lang === 'nl'
+    ? `Goedemorgen iedereen. Ik ben Sarah, projectmanager. Naast mij zit Tom van IT, Lisa van marketing en Peter van finance.\n\nVandaag bespreken we het nieuwe CRM-systeem. Tom: We zijn 80% klaar. Er zijn nog wat bugs in de rapportagemodule, opgelost volgende week.\n\nLisa: Wanneer kunnen we trainen? We hebben het nodig voor de campagne in maart.\nPeter: We zitten binnen budget. Er is nog €15.000 over.\n\nBesluit: livegang op 1 februari. Tom rondt technisch af voor vrijdag. Lisa plant trainingen week 5 en 6. Peter stuurt volgende week budgetupdate.\n\nVolgende vergadering: donderdag 23 januari 10:00.`
+    : `Good morning everyone. I'm Sarah, project manager. With me are Tom from IT, Lisa from Marketing and Peter from Finance.\n\nToday we discuss the new CRM system. Tom: We're 80% done. There are some bugs in the reporting module, fixed next week.\n\nLisa: When can we start training? We need it for the March campaign.\nPeter: We're within budget. There's €15,000 left.\n\nDecision: go-live February 1st. Tom wraps up technical work by Friday. Lisa schedules training weeks 5 and 6. Peter sends budget update next week.\n\nNext meeting: Thursday January 23rd at 10:00 AM.`;
+}
+
+function getDemoNotes() {
+  return lang === 'nl'
+    ? JSON.stringify({ samenvatting:"Statusvergadering over CRM-implementatie. Project op schema voor livegang 1 februari, binnen budget van €15.000.", aanwezigen:["Sarah (Projectmanager)","Tom (IT)","Lisa (Marketing)","Peter (Finance)"], besproken_punten:["CRM-implementatie 80% gereed, bugs in rapportagemodule","Trainingsplanning marketing voor campagne maart","Budgetstatus: €15.000 beschikbaar"], beslissingen:["Livegang CRM op 1 februari","Trainingen week 5 en 6"], actiepunten:[{actie:"Bugs rapportagemodule oplossen",wie:"Tom (IT)",wanneer:"Vrijdag"},{actie:"Trainingen inplannen week 5-6",wie:"Lisa (Marketing)",wanneer:"Week 5-6"},{actie:"Budgetupdate sturen naar directie",wie:"Peter (Finance)",wanneer:"Volgende week"}], volgende_vergadering:"Donderdag 23 januari om 10:00 uur" })
+    : JSON.stringify({ summary:"Status meeting on CRM implementation. Project on track for February 1st go-live, within the €15,000 budget.", attendees:["Sarah (Project Manager)","Tom (IT)","Lisa (Marketing)","Peter (Finance)"], topics:["CRM implementation 80% complete, bugs in reporting module","Training schedule for marketing ahead of March campaign","Budget status: €15,000 remaining"], decisions:["CRM go-live set for February 1st","Training sessions scheduled for weeks 5 and 6"], actions:[{action:"Fix reporting module bugs",who:"Tom (IT)",when:"Friday"},{action:"Schedule training sessions weeks 5–6",who:"Lisa (Marketing)",when:"Weeks 5–6"},{action:"Send budget update to management",who:"Peter (Finance)",when:"Next week"}], next_meeting:"Thursday January 23rd at 10:00 AM" });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+applyTranslations();
+</script>
+</body>
+</html>
