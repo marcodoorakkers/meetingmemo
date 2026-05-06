@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MeetingMemo">
+<meta name="theme-color" content="#0f1117">
+<title>MeetingMemo – Automatische vergadernotulen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e8e8e8;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .header {
+    padding: 20px 20px 12px;
+    border-bottom: 0.5px solid #2a2a3a;
+    position: sticky;
+    top: 0;
+    background: #0f1117;
+    z-index: 10;
+  }
+  .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: #fff; }
+  .logo span { color: #6c63ff; }
+  .subtitle { font-size: 12px; color: #666; margin-top: 2px; }
+
+  .screen { display: none; flex-direction: column; flex: 1; }
+  .screen.active { display: flex; }
+
+  .record-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    gap: 24px;
+  }
+  .meeting-name-input {
+    width: 100%;
+    background: #1a1a2e;
+    border: 0.5px solid #2a2a3a;
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: #e8e8e8;
+    font-size: 15px;
+    outline: none;
+    -webkit-appearance: none;
+  }
+  .meeting-name-input:focus { border-color: #6c63ff; }
+  .meeting-name-input::placeholder { color: #444; }
+
+  .rec-btn-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .rec-btn {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: none;
+    background: #6c63ff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .rec-btn:active { transform: scale(0.95); }
+  .rec-btn.recording { background: #e24b4a; animation: pulse 1.5s infinite; }
+  .rec-btn svg { width: 36px; height: 36px; fill: white; }
+  .rec-btn .stop-icon { width: 28px; height: 28px; background: white; border-radius: 4px; display: none; }
+  .rec-btn.recording svg { display: none; }
+  .rec-btn.recording .stop-icon { display: block; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(226,75,74,0.4); }
+    50% { box-shadow: 0 0 0 20px rgba(226,75,74,0); }
+  }
+  .rec-label { font-size: 13px; color: #666; }
+  .rec-label.recording { color: #e24b4a; }
+
+  .timer {
+    font-size: 32px;
+    font-weight: 300;
+    letter-spacing: 4px;
+    color: #aaa;
+    font-variant-numeric: tabular-nums;
+    display: none;
+  }
+  .timer.visible { display: block; }
+
+  .wave { width: 100%; height: 48px; display: none; }
+  .wave.visible { display: block; }
+
+  .transcribing-box {
+    background: #1a1a2e;
+    border: 0.5px solid #2a2a3a;
+    border-radius: 12px;
+    padding: 14px 16px;
+    width: 100%;
+    font-size: 13px;
+    color: #888;
+    min-height: 80px;
+    max-height: 160px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  .generate-btn {
+    width: 100%;
+    padding: 16px;
+    background: #6c63ff;
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    display: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .generate-btn:active { opacity: 0.85; }
+  .generate-btn.visible { display: block; }
+  .generate-btn:disabled { opacity: 0.5; }
+
+  .loading-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 40px 20px;
+  }
+  .spinner {
+    width: 56px; height: 56px;
+    border: 3px solid #1a1a2e;
+    border-top: 3px solid #6c63ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 15px; color: #888; text-align: center; }
+  .loading-steps { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px; }
+  .step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #555; }
+  .step.done { color: #6c63ff; }
+  .step.active { color: #e8e8e8; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #2a2a3a; flex-shrink: 0; }
+  .step.done .step-dot { background: #6c63ff; }
+  .step.active .step-dot { background: #fff; animation: blink 0.8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .result-screen { flex: 1; display: none; flex-direction: column; }
+  .result-screen.active { display: flex; }
+  .result-header {
+    padding: 16px 20px;
+    border-bottom: 0.5px solid #2a2a3a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .result-title { font-size: 16px; font-weight: 600; }
+  .result-meta { font-size: 12px; color: #666; margin-top: 2px; }
+  .copy-all-btn {
+    background: #1a1a2e;
+    border: 0.5px solid #2a2a3a;
+    border-radius: 8px;
+    color: #aaa;
+    font-size: 12px;
+    padding: 6px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .notes-scroll { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; padding-bottom: 32px; }
+
+  .section-card {
+    background: #1a1a2e;
+    border: 0.5px solid #2a2a3a;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .section-head {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 0.5px solid #2a2a3a;
+  }
+  .section-icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .section-head h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.3px; color: #ccc; }
+  .section-body { padding: 12px 16px; font-size: 14px; line-height: 1.7; color: #bbb; }
+  .section-body p { margin-bottom: 6px; }
+  .section-body p:last-child { margin-bottom: 0; }
+
+  .badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    background: #2a2a3a; border-radius: 20px;
+    padding: 5px 12px; font-size: 13px; color: #ccc;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #6c63ff; }
+
+  .action-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0; border-bottom: 0.5px solid #1f1f2e;
+  }
+  .action-item:last-child { border-bottom: none; }
+  .action-check {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid #3a3a4a; flex-shrink: 0;
+    margin-top: 2px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .action-check.checked { background: #6c63ff; border-color: #6c63ff; }
+  .action-text { flex: 1; }
+  .action-who { font-size: 11px; color: #6c63ff; font-weight: 600; margin-top: 2px; }
+  .action-when { font-size: 11px; color: #555; }
+
+  .decision-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
+  .dec-marker { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+  .new-btn {
+    margin: 0 20px 24px;
+    padding: 14px;
+    background: transparent;
+    border: 0.5px solid #2a2a3a;
+    border-radius: 12px;
+    color: #888;
+    font-size: 14px;
+    cursor: pointer;
+    width: calc(100% - 40px);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .error-box {
+    background: #2a1a1a;
+    border: 0.5px solid #e24b4a44;
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: #e24b4a;
+    width: 100%;
+    display: none;
+    line-height: 1.5;
+  }
+  .error-box.visible { display: block; }
+
+  .api-key-section { padding: 14px 20px 0; }
+  .api-key-label { font-size: 12px; color: #555; margin-bottom: 6px; }
+  .api-key-input {
+    width: 100%;
+    background: #1a1a2e;
+    border: 0.5px solid #2a2a3a;
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #e8e8e8;
+    font-size: 13px;
+    font-family: monospace;
+    outline: none;
+    -webkit-appearance: none;
+  }
+  .api-key-input:focus { border-color: #6c63ff; }
+  .api-key-hint { font-size: 11px; color: #444; margin-top: 5px; }
+  .api-key-hint a { color: #6c63ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">Meeting<span>Memo</span></div>
+  <div class="subtitle">Automatische vergadernotulen met AI</div>
+</div>
+
+<div class="api-key-section">
+  <div class="api-key-label">Anthropic API-sleutel</div>
+  <input class="api-key-input" type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off" />
+  <div class="api-key-hint">Sleutel aanvragen via <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> · Zonder sleutel werkt de demo</div>
+</div>
+
+<!-- RECORD SCREEN -->
+<div class="screen active" id="recordScreen">
+  <div class="record-area">
+    <input class="meeting-name-input" id="meetingName" type="text" placeholder="Naam van de vergadering (optioneel)" />
+
+    <svg class="wave" id="waveVis" viewBox="0 0 320 48" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <div class="rec-btn-wrap">
+      <button class="rec-btn" id="recBtn" onclick="toggleRecording()">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+        <div class="stop-icon"></div>
+      </button>
+      <span class="rec-label" id="recLabel">Tik om op te nemen</span>
+    </div>
+
+    <div class="timer" id="timer">00:00</div>
+
+    <div class="transcribing-box" id="transcriptBox" style="display:none;">
+      <span id="transcriptText" style="color:#555;">Spreek en de tekst verschijnt hier...</span>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <button class="generate-btn" id="generateBtn" onclick="generateNotes()">
+      ✨ Genereer notulen
+    </button>
+  </div>
+</div>
+
+<!-- LOADING SCREEN -->
+<div class="screen" id="loadingScreen">
+  <div class="loading-screen">
+    <div class="spinner"></div>
+    <div class="loading-text">AI analyseert de vergadering…</div>
+    <div class="loading-steps">
+      <div class="step active" id="step1"><div class="step-dot"></div>Transcript verwerken</div>
+      <div class="step" id="step2"><div class="step-dot"></div>Aanwezigen herkennen</div>
+      <div class="step" id="step3"><div class="step-dot"></div>Beslissingen identificeren</div>
+      <div class="step" id="step4"><div class="step-dot"></div>Actiepunten opstellen</div>
+      <div class="step" id="step5"><div class="step-dot"></div>Samenvatting schrijven</div>
+    </div>
+  </div>
+</div>
+
+<!-- RESULT SCREEN -->
+<div class="result-screen" id="resultScreen">
+  <div class="result-header">
+    <div>
+      <div class="result-title" id="resultTitle">Vergadernotulen</div>
+      <div class="result-meta" id="resultMeta"></div>
+    </div>
+    <button class="copy-all-btn" onclick="copyAll()">📋 Kopieer alles</button>
+  </div>
+  <div class="notes-scroll" id="notesContent"></div>
+  <button class="new-btn" onclick="newMeeting()">+ Nieuwe vergadering</button>
+</div>
+
+<script>
+let isRecording = false;
+let timerInterval = null;
+let waveInterval = null;
+let seconds = 0;
+let recognition = null;
+let transcript = '';
+let notesData = null;
+
+function getApiKey() {
+  return document.getElementById('apiKey').value.trim();
+}
+
+function toggleRecording() {
+  if (!isRecording) startRecording();
+  else stopRecording();
+}
+
+async function startRecording() {
+  transcript = '';
+  const errBox = document.getElementById('errorBox');
+  errBox.className = 'error-box';
+
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e) {
+    showError('Microfoon toegang geweigerd. Sta microfoon toe in de browserinstellingen.');
+    return;
+  }
+
+  isRecording = true;
+  seconds = 0;
+
+  document.getElementById('recBtn').classList.add('recording');
+  document.getElementById('recLabel').textContent = 'Tik om te stoppen';
+  document.getElementById('recLabel').classList.add('recording');
+  document.getElementById('timer').classList.add('visible');
+  document.getElementById('waveVis').classList.add('visible');
+  document.getElementById('transcriptBox').style.display = 'block';
+  document.getElementById('generateBtn').classList.remove('visible');
+
+  startTimer();
+  startWave();
+  startSpeechRecognition();
+}
+
+function stopRecording() {
+  isRecording = false;
+  if (recognition) { try { recognition.stop(); } catch(e){} recognition = null; }
+  clearInterval(timerInterval);
+  clearInterval(waveInterval);
+
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recLabel').textContent = 'Opname gestopt';
+  document.getElementById('recLabel').classList.remove('recording');
+  document.getElementById('waveVis').classList.remove('visible');
+
+  const btn = document.getElementById('generateBtn');
+  btn.classList.add('visible');
+  btn.textContent = transcript.trim().length > 20
+    ? '✨ Genereer notulen'
+    : '✨ Genereer notulen (demo-tekst)';
+}
+
+function startSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    document.getElementById('transcriptText').textContent = 'Live transcriptie niet beschikbaar in deze browser. Gebruik Chrome of Edge voor beste resultaat.';
+    return;
+  }
+  recognition = new SR();
+  recognition.lang = 'nl-NL';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  let finalTranscript = '';
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
+    }
+    transcript = finalTranscript + interim;
+    const el = document.getElementById('transcriptText');
+    el.style.color = '#bbb';
+    el.textContent = transcript || 'Spreek en de tekst verschijnt hier...';
+    el.parentElement.scrollTop = el.parentElement.scrollHeight;
+  };
+  recognition.onerror = (e) => {
+    if (e.error !== 'no-speech' && e.error !== 'aborted') {
+      console.warn('Speech error:', e.error);
+    }
+  };
+  recognition.onend = () => { if (isRecording) { try { recognition.start(); } catch(e){} } };
+  try { recognition.start(); } catch(e) {}
+}
+
+function startTimer() {
+  timerInterval = setInterval(() => {
+    seconds++;
+    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const s = String(seconds % 60).padStart(2, '0');
+    document.getElementById('timer').textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+function startWave() {
+  const svg = document.getElementById('waveVis');
+  svg.innerHTML = '';
+  const bars = 24;
+  const rects = [];
+  for (let i = 0; i < bars; i++) {
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', 4 + i * 13);
+    rect.setAttribute('width', 8);
+    rect.setAttribute('rx', 4);
+    rect.setAttribute('fill', '#6c63ff');
+    svg.appendChild(rect);
+    rects.push(rect);
+  }
+  function animate() {
+    rects.forEach(r => {
+      const h = 8 + Math.random() * 32;
+      r.setAttribute('height', h);
+      r.setAttribute('y', 24 - h / 2);
+    });
+  }
+  animate();
+  waveInterval = setInterval(animate, 120);
+}
+
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  b.textContent = msg;
+  b.className = 'error-box visible';
+}
+
+function formatDuration(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m} min ${s} sec` : `${s} sec`;
+}
+
+async function generateNotes() {
+  const apiKey = getApiKey();
+  const meetingName = document.getElementById('meetingName').value.trim() || 'Vergadering';
+  const textToAnalyze = transcript.trim() || getDemoTranscript();
+
+  document.getElementById('generateBtn').disabled = true;
+  showScreen('loadingScreen');
+  animateSteps();
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('nl-NL', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const timeStr = now.toLocaleTimeString('nl-NL', { hour:'2-digit', minute:'2-digit' });
+
+  const prompt = `Je bent een professionele notulist. Analyseer het volgende vergadertranscript en maak gestructureerde notulen in het Nederlands.
+
+Transcript:
+"""
+${textToAnalyze}
+"""
+
+Geef je antwoord ALLEEN als geldig JSON (geen markdown, geen uitleg, geen backticks), in dit exacte formaat:
+{
+  "samenvatting": "2-3 zinnen samenvatting van de vergadering",
+  "aanwezigen": ["Naam 1", "Naam 2"],
+  "besproken_punten": ["Punt 1", "Punt 2", "Punt 3"],
+  "beslissingen": ["Beslissing 1", "Beslissing 2"],
+  "actiepunten": [
+    {"actie": "Omschrijving", "wie": "Naam of team", "wanneer": "Deadline"},
+    {"actie": "Omschrijving", "wie": "Naam of team", "wanneer": "Datum"}
+  ],
+  "volgende_vergadering": "Datum/tijd of Nog niet gepland"
+}
+
+Als een veld niet van toepassing is, geef dan een lege array [] of lege string "".`;
+
+  try {
+    let responseText;
+
+    if (apiKey && apiKey.startsWith('sk-ant-')) {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      responseText = data.content[0].text;
+    } else {
+      await new Promise(r => setTimeout(r, 2800));
+      responseText = getDemoNotes();
+    }
+
+    const clean = responseText.replace(/```json|```/g, '').trim();
+    notesData = JSON.parse(clean);
+    notesData._meta = {
+      title: meetingName,
+      date: dateStr,
+      time: timeStr,
+      duration: formatDuration(seconds)
+    };
+    renderNotes(notesData);
+    showScreen('resultScreen');
+
+  } catch(e) {
+    showScreen('recordScreen');
+    document.getElementById('generateBtn').disabled = false;
+    showError('Fout bij verwerken: ' + e.message + '\nControleer je API-sleutel of gebruik de app zonder sleutel voor de demo.');
+    document.getElementById('generateBtn').classList.add('visible');
+  }
+}
+
+function animateSteps() {
+  const steps = ['step1','step2','step3','step4','step5'];
+  let i = 0;
+  const next = () => {
+    if (i > 0) document.getElementById(steps[i-1]).className = 'step done';
+    if (i < steps.length) {
+      document.getElementById(steps[i]).className = 'step active';
+      i++;
+      setTimeout(next, 600);
+    }
+  };
+  next();
+}
+
+function renderNotes(data) {
+  const c = document.getElementById('notesContent');
+  c.innerHTML = '';
+  document.getElementById('resultTitle').textContent = data._meta.title;
+  document.getElementById('resultMeta').textContent = `${data._meta.date} · ${data._meta.time} · ${data._meta.duration}`;
+
+  if (data.samenvatting) c.innerHTML += card('📋', '#3a3a5a', 'Samenvatting', `<p>${data.samenvatting}</p>`);
+
+  if (data.aanwezigen?.length) {
+    const badges = data.aanwezigen.map(n => `<div class="badge"><div class="badge-dot"></div>${n}</div>`).join('');
+    c.innerHTML += card('👥', '#1a3a2a', 'Aanwezigen', `<div class="badge-row">${badges}</div>`);
+  }
+
+  if (data.besproken_punten?.length) {
+    const items = data.besproken_punten.map(p => `<p>• ${p}</p>`).join('');
+    c.innerHTML += card('💬', '#2a2a4a', 'Besproken punten', items);
+  }
+
+  if (data.beslissingen?.length) {
+    const items = data.beslissingen.map(d => `<div class="decision-item"><span class="dec-marker">✓</span><span>${d}</span></div>`).join('');
+    c.innerHTML += card('🎯', '#2a3a1a', 'Beslissingen', items);
+  }
+
+  if (data.actiepunten?.length) {
+    const items = data.actiepunten.map((a, i) => `
+      <div class="action-item">
+        <div class="action-check" id="ac${i}" onclick="this.classList.toggle('checked')"></div>
+        <div class="action-text">
+          <div>${a.actie}</div>
+          <div class="action-who">${a.wie || ''}</div>
+          <div class="action-when">${a.wanneer || ''}</div>
+        </div>
+      </div>`).join('');
+    c.innerHTML += card('⚡', '#3a2a1a', `Actiepunten (${data.actiepunten.length})`, items);
+  }
+
+  if (data.volgende_vergadering) {
+    c.innerHTML += card('📅', '#2a1a3a', 'Volgende vergadering', `<p>${data.volgende_vergadering}</p>`);
+  }
+}
+
+function card(icon, bg, title, body) {
+  return `<div class="section-card">
+    <div class="section-head">
+      <div class="section-icon" style="background:${bg};">${icon}</div>
+      <h3>${title}</h3>
+    </div>
+    <div class="section-body">${body}</div>
+  </div>`;
+}
+
+function copyAll() {
+  if (!notesData) return;
+  const d = notesData;
+  let txt = `VERGADERNOTULEN: ${d._meta.title}\n${d._meta.date} · ${d._meta.time} · Duur: ${d._meta.duration}\n\n`;
+  if (d.samenvatting) txt += `SAMENVATTING\n${d.samenvatting}\n\n`;
+  if (d.aanwezigen?.length) txt += `AANWEZIGEN\n${d.aanwezigen.join(', ')}\n\n`;
+  if (d.besproken_punten?.length) txt += `BESPROKEN PUNTEN\n${d.besproken_punten.map(p=>'• '+p).join('\n')}\n\n`;
+  if (d.beslissingen?.length) txt += `BESLISSINGEN\n${d.beslissingen.map(p=>'✓ '+p).join('\n')}\n\n`;
+  if (d.actiepunten?.length) txt += `ACTIEPUNTEN\n${d.actiepunten.map(a=>`[ ] ${a.actie} — ${a.wie} — ${a.wanneer}`).join('\n')}\n\n`;
+  if (d.volgende_vergadering) txt += `VOLGENDE VERGADERING\n${d.volgende_vergadering}\n`;
+
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.querySelector('.copy-all-btn');
+    btn.textContent = '✅ Gekopieerd!';
+    setTimeout(() => btn.textContent = '📋 Kopieer alles', 2000);
+  }).catch(() => {
+    alert('Kopiëren niet gelukt. Selecteer de tekst handmatig.');
+  });
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen, .result-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function newMeeting() {
+  transcript = '';
+  seconds = 0;
+  notesData = null;
+  document.getElementById('timer').classList.remove('visible');
+  document.getElementById('timer').textContent = '00:00';
+  document.getElementById('transcriptBox').style.display = 'none';
+  document.getElementById('generateBtn').classList.remove('visible');
+  document.getElementById('generateBtn').disabled = false;
+  document.getElementById('generateBtn').textContent = '✨ Genereer notulen';
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recLabel').textContent = 'Tik om op te nemen';
+  document.getElementById('recLabel').classList.remove('recording');
+  document.getElementById('meetingName').value = '';
+  document.getElementById('errorBox').className = 'error-box';
+  document.getElementById('transcriptText').textContent = 'Spreek en de tekst verschijnt hier...';
+  showScreen('recordScreen');
+}
+
+function getDemoTranscript() {
+  return `Goedemorgen iedereen. Ik ben Sarah, projectmanager. Naast mij zit Tom van IT, Lisa van marketing en Peter van finance.
+
+Vandaag bespreken we het nieuwe CRM-systeem. Tom, kun je de status geven?
+Tom: We zijn 80% klaar met de implementatie. Er zijn nog wat bugs in de rapportagemodule. We verwachten die volgende week opgelost te hebben.
+
+Lisa: Wanneer kunnen we dan beginnen met trainen? We hebben het systeem hard nodig voor de campagne in maart.
+Sarah: Peter, wat is de huidige budgetsituatie?
+Peter: We zitten binnen budget. Er is nog 15.000 euro over voor training en onvoorziene kosten.
+
+We besluiten dat de livegang op 1 februari plaatsvindt. Tom regelt de technische afronding voor vrijdag. Lisa plant de trainingen voor de marketingafdeling in week 5 en 6. Peter stuurt volgende week een budgetupdate naar de directie.
+
+De volgende vergadering is donderdag 23 januari om 10:00 uur.`;
+}
+
+function getDemoNotes() {
+  return JSON.stringify({
+    samenvatting: "Statusvergadering over de implementatie van het nieuwe CRM-systeem. Het project loopt op schema voor livegang op 1 februari, binnen het beschikbare budget van €15.000.",
+    aanwezigen: ["Sarah (Projectmanager)", "Tom (IT)", "Lisa (Marketing)", "Peter (Finance)"],
+    besproken_punten: [
+      "Voortgang CRM-implementatie: 80% gereed, bugs in rapportagemodule",
+      "Planning training marketingafdeling voor campagne in maart",
+      "Budgetstatus: nog €15.000 beschikbaar voor training en onvoorziene kosten"
+    ],
+    beslissingen: [
+      "Livegang CRM-systeem op 1 februari",
+      "Trainingen worden gepland in week 5 en 6"
+    ],
+    actiepunten: [
+      { actie: "Technische bugs in rapportagemodule oplossen", wie: "Tom (IT)", wanneer: "Vrijdag deze week" },
+      { actie: "Trainingen marketingafdeling inplannen (week 5 & 6)", wie: "Lisa (Marketing)", wanneer: "Week 5-6" },
+      { actie: "Budgetupdate sturen naar directie", wie: "Peter (Finance)", wanneer: "Volgende week" }
+    ],
+    volgende_vergadering: "Donderdag 23 januari om 10:00 uur"
+  });
+}
+</script>
+</body>
+</html>
