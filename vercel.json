@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "functions": {
+    "api/transcribe.js": { "maxDuration": 60 },
+    "api/notes.js":      { "maxDuration": 30 }
+  }
+}
