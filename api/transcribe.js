@@ -59,14 +59,20 @@ export default async function handler(req, res) {
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks);
 
-    const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': req.headers['content-type'],  // pass through boundary
-      },
-      body,
-    });
+   // Rebuild as proper FormData so Whisper gets the right filename + type
+const { FormData, Blob } = await import('node:buffer').then(() => globalThis);
+const audioBlob = new Blob([body], { type: 'audio/webm' });
+const form = new FormData();
+form.append('file', audioBlob, 'recording.webm');
+form.append('model', 'whisper-1');
+
+const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+  },
+  body: form,
+});
 
     const data = await whisperRes.json();
     if (data.error) return res.status(502).json({ error: data.error.message });
