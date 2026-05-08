@@ -11,33 +11,16 @@ export default async function handler(req, res) {
   try {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
-    const audioBuffer = Buffer.concat(chunks);
-
-    const contentType = req.headers['content-type'] || 'audio/webm';
-    let ext = 'webm';
-    if (contentType.includes('mp4'))      ext = 'mp4';
-    else if (contentType.includes('ogg')) ext = 'ogg';
-
-    const boundary = '----Boundary' + Math.random().toString(36).slice(2);
-    const CRLF = '\r\n';
-    const head = Buffer.from(
-      `--${boundary}${CRLF}` +
-      `Content-Disposition: form-data; name="file"; filename="recording.${ext}"${CRLF}` +
-      `Content-Type: ${contentType.split(';')[0]}${CRLF}${CRLF}`
-    );
-    const tail = Buffer.from(
-      `${CRLF}--${boundary}${CRLF}` +
-      `Content-Disposition: form-data; name="model"${CRLF}${CRLF}` +
-      `whisper-1${CRLF}--${boundary}--${CRLF}`
-    );
+    const body = Buffer.concat(chunks);
+    const contentType = req.headers['content-type'];
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Type': contentType,
       },
-      body: Buffer.concat([head, audioBuffer, tail]),
+      body,
     });
 
     const data = await whisperRes.json();
