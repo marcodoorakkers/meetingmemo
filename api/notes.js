@@ -19,10 +19,12 @@ export default async function handler(req, res) {
 
   // ── Auth ──────────────────────────────────────────────────────────────────────
   const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) return res.status(401).json({ error: 'Invalid session' });
+  // DEV_MODE: als er geen token is, toch doorgaan (alleen voor testen)
+  let user = null;
+  if (token) {
+    const { data: { user: u }, error: authError } = await supabase.auth.getUser(token);
+    if (!authError) user = u;
+  }
 
   // ── Parse request ─────────────────────────────────────────────────────────────
   const { prompt, lang } = req.body;
@@ -49,13 +51,15 @@ export default async function handler(req, res) {
 
     // ── Update meeting record with notes generated ─────────────────────────────
     // Find the most recent transcription record for this user and mark it complete
-    await supabase
-      .from('meetings')
-      .update({ notes_generated: true, lang })
-      .eq('user_id', user.id)
-      .eq('notes_generated', false)
-      .order('created_at', { ascending: false })
-      .limit(1);
+    if (user) {
+      await supabase
+        .from('meetings')
+        .update({ notes_generated: true, lang })
+        .eq('user_id', user.id)
+        .eq('notes_generated', false)
+        .order('created_at', { ascending: false })
+        .limit(1);
+    }
 
     return res.status(200).json({ text: data.content[0].text });
 

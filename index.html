@@ -495,8 +495,8 @@ body {
 <script>
 // ── Supabase client ───────────────────────────────────────────────────────────
 // Vervang deze waarden — Supabase > jouw project > Settings > API
-const SUPABASE_URL  = 'https://aginqdzayncmzcusopxd.supabase.co';
-const SUPABASE_ANON = 'sb_publishable_AEWPvIymboRPm3oPs9Kpog_zAUGUD1W';
+const SUPABASE_URL  = 'https://JOUW_PROJECT.supabase.co';
+const SUPABASE_ANON = 'JOUW_ANON_KEY';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -517,6 +517,7 @@ let currentUser = null;
 let userPlan = 'free';
 let usageCount = 0;
 const FREE_LIMIT = 5;
+const DEV_MODE = true; // ← zet op false als je auth weer wilt aanzetten
 
 const COLORS = ['#6c63ff','#e24b4a','#1d9e75','#ef9f27','#d4537e','#378add','#ba7517','#3b6d11'];
 
@@ -857,6 +858,19 @@ async function stopRecording() {
 }
 
 async function transcribeWithWhisper() {
+  if (DEV_MODE) {
+    // DEV: stuur audio zonder auth token
+    const mimeType = audioChunks[0]?.type || 'audio/webm';
+    const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+    const blob = new Blob(audioChunks, { type: mimeType });
+    const fd = new FormData();
+    fd.append('file', blob, `recording.${ext}`);
+    fd.append('model', 'whisper-1');
+    const res = await fetch('/api/transcribe-dev', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Transcriptie mislukt');
+    return data.text || '';
+  }
   const { data: { session } } = await sb.auth.getSession();
   if (!session) throw new Error('Niet ingelogd');
   const mimeType = audioChunks[0]?.type || 'audio/webm';
@@ -987,12 +1001,10 @@ async function generateNotes(skipLabels) {
   try {
     let responseText;
     const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-      const res=await fetch('/api/notes',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},
-        body:JSON.stringify({prompt, lang})
-      });
+    if (DEV_MODE || session) {
+      const headers = {'Content-Type':'application/json'};
+      if (session) headers['Authorization'] = `Bearer ${session.access_token}`;
+      const res=await fetch('/api/notes',{method:'POST',headers,body:JSON.stringify({prompt, lang})});
       const data=await res.json();
       if(!res.ok) throw new Error(data.error || 'Notulen genereren mislukt');
       responseText=data.text;
@@ -1341,6 +1353,16 @@ sb.auth.onAuthStateChange((event, session) => {
 
 // Check existing session on load
 sb.auth.getSession().then(({ data: { session } }) => {
+  if (DEV_MODE && !session) {
+    // DEV: sla login over, ga direct naar de app
+    document.getElementById('historyBtn').style.display = '';
+    document.getElementById('settingsBtn').style.display = '';
+    document.getElementById('stepsBar').style.display = '';
+    document.getElementById('setupScreen').classList.add('active');
+    document.getElementById('authScreen').classList.remove('active');
+    loadDefaultAttendees(); renderDefaultChips(); renderDefaultsChecklist(); applyTranslations();
+    return;
+  }
   if (!session) {
     document.getElementById('authScreen').classList.add('active');
     applyTranslations();
