@@ -505,7 +505,7 @@ let attendees = [];
 let defaultAttendees = [];
 let isRecording = false;
 let timerInterval = null, waveInterval = null;
-let seconds = 0;
+let recordingStartTime = null;
 let audioChunks = [], mediaRecorder = null;
 let transcript = '';
 let segments = [], selectedSpeaker = null;
@@ -810,7 +810,7 @@ async function startRecording() {
   mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
   mediaRecorder.start(1000);
 
-  isRecording = true; seconds = 0;
+  isRecording = true; recordingStartTime = Date.now();
   document.getElementById('recBtn').classList.add('recording');
   document.getElementById('recLabel').textContent = tx().tapToStop;
   document.getElementById('recLabel').classList.add('recording');
@@ -899,11 +899,20 @@ async function transcribeWithWhisper() {
 
 function startTimer() {
   timerInterval = setInterval(() => {
-    seconds++;
+    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
     document.getElementById('timer').textContent =
-      String(Math.floor(seconds/60)).padStart(2,'0') + ':' + String(seconds%60).padStart(2,'0');
+      String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0');
   }, 1000);
 }
+
+// Herstel timer weergave als scherm terugkomt na vergrendeling
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && isRecording && recordingStartTime) {
+    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+    document.getElementById('timer').textContent =
+      String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0');
+  }
+});
 
 function startWave() {
   const svg = document.getElementById('waveVis'); svg.innerHTML='';
@@ -1088,7 +1097,7 @@ function copyAll() {
 
 // ── New meeting ───────────────────────────────────────────────────────────────
 function newMeeting() {
-  transcript=''; segments=[]; audioChunks=[]; seconds=0; notesData=null; selectedSpeaker=null;
+  transcript=''; segments=[]; audioChunks=[]; recordingStartTime=null; notesData=null; selectedSpeaker=null;
   attendees=[]; renderAttendeeChips(); renderDefaultsChecklist();
   document.getElementById('timer').classList.remove('visible');
   document.getElementById('timer').textContent='00:00';
