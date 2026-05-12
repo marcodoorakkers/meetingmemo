@@ -914,8 +914,14 @@ async function startRecording() {
   catch(e) { showRecError(tx().micError); return; }
 
   audioChunks = [];
-  const opts = MediaRecorder.isTypeSupported('audio/webm') ? { mimeType:'audio/webm' }
-    : MediaRecorder.isTypeSupported('audio/mp4') ? { mimeType:'audio/mp4' } : {};
+  const AUDIO_BITRATE = 16000; // 16kbps — prima voor spraak, kleine bestanden
+  const opts = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? { mimeType:'audio/webm;codecs=opus', audioBitsPerSecond: AUDIO_BITRATE }
+    : MediaRecorder.isTypeSupported('audio/webm')
+    ? { mimeType:'audio/webm', audioBitsPerSecond: AUDIO_BITRATE }
+    : MediaRecorder.isTypeSupported('audio/mp4')
+    ? { mimeType:'audio/mp4', audioBitsPerSecond: AUDIO_BITRATE }
+    : { audioBitsPerSecond: AUDIO_BITRATE };
   mediaRecorder = new MediaRecorder(stream, opts);
   mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
   mediaRecorder.start(1000);
@@ -978,14 +984,18 @@ async function transcribeChunk(chunkBlobs, mimeType, ext, headers, endpoint) {
     headers: headers?.auth ? { 'Authorization': headers.auth } : {},
     body: fd,
   });
-  const data = await res.json();
+  // Veilig parsen: geeft duidelijke fout als server geen JSON stuurt
+  const raw = await res.text();
+  let data;
+  try { data = JSON.parse(raw); }
+  catch(e) { throw new Error(`Server fout ${res.status} — bestand te groot of timeout? (${Math.round(blob.size/1024)}KB)`); }
   if (!res.ok) throw new Error(data.error || 'Transcriptie mislukt');
   return data.text || '';
 }
 
 async function transcribeWithWhisper() {
   const CHUNK_SIZE = 300; // ~5 minuten per chunk (1 chunk = 1 seconde)
-  const mimeType = audioChunks[0]?.type || 'audio/webm';
+  const mimeType = (audioChunks[0]?.type || 'audio/webm').split(';')[0]; // strip ;codecs=...
   const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
   const totalChunks = Math.ceil(audioChunks.length / CHUNK_SIZE);
   const parts = [];
