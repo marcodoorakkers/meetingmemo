@@ -128,6 +128,9 @@ body {
 
 /* ── SETUP SCREEN ── */
 .setup-area { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 18px; overflow-y: auto; padding-bottom: 32px; }
+.ics-import-btn { width: 100%; padding: 11px; background: #1a1a2e; border: 1px dashed #3a3a5a; border-radius: 12px; color: #888; font-size: 14px; cursor: pointer; text-align: center; transition: border-color 0.15s, color 0.15s; }
+.ics-import-btn:hover { border-color: #6c63ff; color: #6c63ff; }
+.ics-imported-badge { font-size: 12px; color: #6c63ff; margin-top: 6px; display: none; }
 
 .lang-toggle { display: flex; background: #1a1a2e; border: 0.5px solid #2a2a3a; border-radius: 10px; overflow: hidden; }
 .lang-opt { flex: 1; padding: 10px; border: none; background: transparent; color: #666; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s, color 0.15s; -webkit-tap-highlight-color: transparent; text-align: center; }
@@ -367,6 +370,12 @@ body {
   <div class="setup-area">
 
     <div>
+      <input type="file" id="icsFileInput" accept=".ics" style="display:none" onchange="importICS(this)" />
+      <button class="ics-import-btn" id="icsImportBtn" onclick="document.getElementById('icsFileInput').click()">📅 <span id="icsImportLabel"></span></button>
+      <div class="ics-imported-badge" id="icsImportedBadge"></div>
+    </div>
+
+    <div>
       <div class="field-label" id="labelMeetingName"></div>
       <input class="text-input" type="text" id="meetingName" />
     </div>
@@ -565,6 +574,8 @@ const T = {
     whisperError: 'Transcriptie mislukt: ',
     errorPrefix: 'Fout: ', errorSuffix: '\nControleer je API-sleutel in ⚙️ Instellingen.',
     copyFail: 'Kopiëren mislukt.',
+    icsImportLabel: 'Importeer uit agenda (.ics)',
+    icsImportedBadge: (title, n) => `✓ Geïmporteerd: "${title}" · ${n} deelnemer${n===1?'':'s'}`,
     defaultName: 'Vergadering',
     speechLang: 'nl', dateLocale: 'nl-NL',
     durationFmt: (m,s) => m > 0 ? `${m} min ${s} sec` : `${s} sec`,
@@ -614,6 +625,8 @@ const T = {
     whisperError: 'Transcription failed: ',
     errorPrefix: 'Error: ', errorSuffix: '\nCheck your API key in ⚙️ Settings.',
     copyFail: 'Copy failed.',
+    icsImportLabel: 'Import from calendar (.ics)',
+    icsImportedBadge: (title, n) => `✓ Imported: "${title}" · ${n} attendee${n===1?'':'s'}`,
     defaultName: 'Meeting',
     speechLang: 'en', dateLocale: 'en-GB',
     durationFmt: (m,s) => m > 0 ? `${m} min ${s} sec` : `${s} sec`,
@@ -657,6 +670,7 @@ function applyTranslations() {
   document.getElementById('settingsDefaultsHint').textContent = t.settingsDefaultsHint;
   document.getElementById('defaultAttendeeInput').placeholder = t.defaultAttendeePlaceholder;
   // Setup
+  document.getElementById('icsImportLabel').textContent = t.icsImportLabel;
   document.getElementById('labelMeetingName').textContent = t.labelMeetingName;
   document.getElementById('meetingName').placeholder = t.meetingPlaceholder;
   document.getElementById('labelLang').textContent = t.labelLang;
@@ -733,6 +747,64 @@ function renderDefaultsChecklist() {
       <div class="default-check-name">${a.name}</div>
     </div>`;
   }).join('');
+}
+
+// ── ICS import ────────────────────────────────────────────────────────────────
+
+function importICS(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = e.target.result;
+
+      // Unfold lines (RFC 5545: lines ending with CRLF + whitespace are continuations)
+      const unfolded = text.replace(/\r?\n[ \t]/g, '');
+      const lines = unfolded.split(/\r?\n/);
+
+      const get = (key) => {
+        const re = new RegExp(`^${key}(?:;[^:]*)?:(.*)`, 'i');
+        for (const l of lines) { const m = l.match(re); if (m) return m[1].trim(); }
+        return '';
+      };
+
+      // Meeting title
+      const summary = get('SUMMARY').replace(/\\,/g, ',').replace(/\\n/g, ' ');
+
+      // Attendees: ATTENDEE;CN="Name":mailto:... or ORGANIZER;CN=Name:...
+      const names = new Set();
+      for (const l of lines) {
+        const m = l.match(/^(?:ATTENDEE|ORGANIZER)(?:;[^:]*)?CN="?([^";:]+)"?/i);
+        if (m) {
+          const name = m[1].trim();
+          if (name && !/mailto:/i.test(name)) names.add(name);
+        }
+      }
+
+      // Fill meeting name
+      if (summary) document.getElementById('meetingName').value = summary;
+
+      // Add attendees (skip duplicates)
+      names.forEach(name => {
+        if (!attendees.find(a => a.name.toLowerCase() === name.toLowerCase())) {
+          attendees.push({ name, color: COLORS[attendees.length % COLORS.length] });
+        }
+      });
+      renderAttendeeChips();
+
+      // Show badge
+      const badge = document.getElementById('icsImportedBadge');
+      badge.textContent = tx().icsImportedBadge(summary || tx().defaultName, names.size);
+      badge.style.display = 'block';
+
+      // Reset input so same file can be re-imported
+      input.value = '';
+    } catch(err) {
+      console.error('ICS parse error', err);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function toggleDefaultAttendee(i) {
