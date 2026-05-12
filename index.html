@@ -967,44 +967,53 @@ async function stopRecording() {
   renderReviewScreen();
 }
 
-async function transcribeWithWhisper() {
-  if (DEV_MODE) {
-    // DEV: stuur audio zonder auth token
-    const mimeType = audioChunks[0]?.type || 'audio/webm';
-    const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
-    const blob = new Blob(audioChunks, { type: mimeType });
-    const fd = new FormData();
-    fd.append('file', blob, `recording.${ext}`);
-    fd.append('model', 'whisper-1');
-    const res = await fetch('/api/transcribe-dev', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Transcriptie mislukt');
-    return data.text || '';
-  }
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) throw new Error('Niet ingelogd');
-  const mimeType = audioChunks[0]?.type || 'audio/webm';
-  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-  const blob = new Blob(audioChunks, { type: mimeType });
+async function transcribeChunk(chunkBlobs, mimeType, ext, headers, endpoint) {
+  const blob = new Blob(chunkBlobs, { type: mimeType });
   const fd = new FormData();
-  fd.append('file', blob, `rec.${ext}`);
+  fd.append('file', blob, `recording.${ext}`);
   fd.append('model', 'whisper-1');
-  fd.append('language', tx().speechLang);
-  const res = await fetch('/api/transcribe', {
+  if (headers?.language) fd.append('language', headers.language);
+  const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${session.access_token}` },
+    headers: headers?.auth ? { 'Authorization': headers.auth } : {},
     body: fd,
   });
   const data = await res.json();
-  if (!res.ok) {
-    if (data.error === 'monthly_limit_reached') {
-      throw new Error(`Maandlimiet bereikt (${data.used}/${data.limit} vergaderingen). Upgrade naar Pro voor onbeperkt gebruik.`);
+  if (!res.ok) throw new Error(data.error || 'Transcriptie mislukt');
+  return data.text || '';
+}
+
+async function transcribeWithWhisper() {
+  const CHUNK_SIZE = 300; // ~5 minuten per chunk (1 chunk = 1 seconde)
+  const mimeType = audioChunks[0]?.type || 'audio/webm';
+  const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const totalChunks = Math.ceil(audioChunks.length / CHUNK_SIZE);
+  const parts = [];
+  const labelEl = document.getElementById('transcribingLabel');
+
+  if (DEV_MODE) {
+    for (let i = 0; i < totalChunks; i++) {
+      if (labelEl && totalChunks > 1) labelEl.textContent = `Deel ${i+1} van ${totalChunks} wordt getranscribeerd…`;
+      const slice = audioChunks.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      const text = await transcribeChunk(slice, mimeType, ext, {}, '/api/transcribe-dev');
+      parts.push(text);
     }
-    throw new Error(data.error || 'Transcriptie mislukt');
+    return parts.join(' ');
+  }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('Niet ingelogd');
+  const prodParts = [];
+  for (let i = 0; i < totalChunks; i++) {
+    if (labelEl && totalChunks > 1) labelEl.textContent = `Deel ${i+1} van ${totalChunks} wordt getranscribeerd…`;
+    const slice = audioChunks.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    const text = await transcribeChunk(slice, mimeType, ext,
+      { auth: `Bearer ${session.access_token}`, language: tx().speechLang },
+      '/api/transcribe');
+    prodParts.push(text);
   }
   usageCount++;
   updateUsageBar();
-  return data.text || '';
+  return prodParts.join(' ');
 }
 
 function startTimer() {
