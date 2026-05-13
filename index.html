@@ -1154,7 +1154,8 @@ async function generateNotes(skipLabels) {
     }
     const clean=responseText.replace(/```json|```/g,'').trim();
     notesData=JSON.parse(clean);
-    notesData._meta={title:meetingName,date:dateStr,time:timeStr,duration:t.durationFmt(Math.floor(seconds/60),seconds%60)};
+    const totalSec = recordingStartTime ? Math.floor((Date.now() - recordingStartTime) / 1000) : 0;
+    notesData._meta={title:meetingName,date:dateStr,time:timeStr,duration:t.durationFmt(Math.floor(totalSec/60),totalSec%60)};
     renderNotes(notesData);
     saveMeetingToHistory(notesData);
     document.getElementById('stepsBar').style.display='none';
