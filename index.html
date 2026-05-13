@@ -914,16 +914,17 @@ async function startRecording() {
   catch(e) { showRecError(tx().micError); return; }
 
   audioChunks = [];
-  const AUDIO_BITRATE = 16000; // 16kbps — prima voor spraak, kleine bestanden
+  // iOS (Safari) ondersteunt geen audioBitsPerSecond goed — gebruik standaard kwaliteit voor MP4
+  // Chrome/desktop: webm+opus met lage bitrate voor kleinere bestanden
   const opts = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? { mimeType:'audio/webm;codecs=opus', audioBitsPerSecond: AUDIO_BITRATE }
+    ? { mimeType:'audio/webm;codecs=opus', audioBitsPerSecond: 16000 }
     : MediaRecorder.isTypeSupported('audio/webm')
-    ? { mimeType:'audio/webm', audioBitsPerSecond: AUDIO_BITRATE }
+    ? { mimeType:'audio/webm', audioBitsPerSecond: 16000 }
     : MediaRecorder.isTypeSupported('audio/mp4')
-    ? { mimeType:'audio/mp4', audioBitsPerSecond: AUDIO_BITRATE }
-    : { audioBitsPerSecond: AUDIO_BITRATE };
+    ? { mimeType:'audio/mp4' }   // geen bitrate voor iOS — laat Safari zelf kiezen
+    : {};
   mediaRecorder = new MediaRecorder(stream, opts);
-  recordingMimeType = mediaRecorder.mimeType.split(';')[0] || 'audio/webm'; // sla werkelijk gebruikte mimeType op
+  recordingMimeType = mediaRecorder.mimeType.split(';')[0] || 'audio/mp4'; // sla werkelijk gebruikte mimeType op
   mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
   mediaRecorder.start(1000);
 
@@ -989,7 +990,7 @@ async function transcribeChunk(chunkBlobs, mimeType, ext, headers, endpoint) {
   const raw = await res.text();
   let data;
   try { data = JSON.parse(raw); }
-  catch(e) { throw new Error(`Server fout ${res.status} — bestand te groot of timeout? (${Math.round(blob.size/1024)}KB)`); }
+  catch(e) { throw new Error(`Server fout ${res.status} (${Math.round(blob.size/1024)}KB, ${mimeType}→.${ext}): ${raw.substring(0,120)}`); }
   if (!res.ok) throw new Error(data.error || 'Transcriptie mislukt');
   return data.text || '';
 }
