@@ -553,7 +553,7 @@ let defaultAttendees = [];
 let isRecording = false;
 let timerInterval = null, waveInterval = null;
 let recordingStartTime = null;
-let audioChunks = [], mediaRecorder = null;
+let audioChunks = [], mediaRecorder = null, recordingMimeType = 'audio/webm';
 let transcript = '';
 let segments = [], selectedSpeaker = null;
 let notesData = null;
@@ -923,6 +923,7 @@ async function startRecording() {
     ? { mimeType:'audio/mp4', audioBitsPerSecond: AUDIO_BITRATE }
     : { audioBitsPerSecond: AUDIO_BITRATE };
   mediaRecorder = new MediaRecorder(stream, opts);
+  recordingMimeType = mediaRecorder.mimeType.split(';')[0] || 'audio/webm'; // sla werkelijk gebruikte mimeType op
   mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
   mediaRecorder.start(1000);
 
@@ -995,8 +996,8 @@ async function transcribeChunk(chunkBlobs, mimeType, ext, headers, endpoint) {
 
 async function transcribeWithWhisper() {
   const CHUNK_SIZE = 300; // ~5 minuten per chunk (1 chunk = 1 seconde)
-  const mimeType = (audioChunks[0]?.type || 'audio/webm').split(';')[0]; // strip ;codecs=...
-  const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const mimeType = recordingMimeType; // gebruik mimeType van mediaRecorder (betrouwbaar op iOS)
+  const ext = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
   const totalChunks = Math.ceil(audioChunks.length / CHUNK_SIZE);
   const parts = [];
   const labelEl = document.getElementById('transcribingLabel');
